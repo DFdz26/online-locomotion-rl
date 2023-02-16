@@ -1,0 +1,7 @@
+{
+  "device": "cuda:0",
+  "rollouts": 15,
+  "h": 10,
+  "decay": 0.992,
+  "variance": 0.036
+}

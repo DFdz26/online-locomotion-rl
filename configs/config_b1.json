@@ -1,0 +1,53 @@
+{
+  "sim_params": {
+    "use_gpu": true
+  },
+  "asset_options": {
+    "asset_folder": "../models/b1/urdf",
+    "asset_filename": "b1.urdf",
+    "asset_name": "b1",
+    "dof_drive_mode": "FORCE",
+    "terminate_after_contacts_on": ["thigh", "hip"],
+    "penalization_contacts_on": ["calf"],
+    "foot_contacts_on": "foot",
+    "goal_height": 0.75,
+    "initial_postion": {
+      "y": 0.0,
+      "x": 0.0,
+      "z": 0.75
+    },
+    "asset_config": {
+      "fix_base_link": false,
+      "use_mesh_materials": true,
+      "self_collision": true
+    },
+    "default_joint_angles": { 
+        "FL_hip_joint": 0.1,  
+        "RL_hip_joint": 0.1,  
+        "FR_hip_joint": -0.1,  
+        "RR_hip_joint": -0.1,  
+
+        "FL_thigh_joint": 0.68,  
+        "RL_thigh_joint": 0.68,  
+        "FR_thigh_joint": 0.68,  
+        "RR_thigh_joint": 0.68,  
+
+        "FL_calf_joint": -1.254,  
+        "RL_calf_joint": -1.254,  
+        "FR_calf_joint": -1.254,  
+        "RR_calf_joint": -1.254  
+    },
+    "gains_constants": {
+      "Kp": {
+        "hip_joint": 110.0,
+        "thigh_joint": 1150.0,
+        "calf_joint": 125.0
+      },
+       "Kd": {
+        "hip_joint": 1.5,
+        "thigh_joint": 1.5,
+        "calf_joint": 0.7
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "device": "cuda",
+  "HYPERPARAM": {
+    "NIN": 1,
+    "NSTATE": 20,
+    "MOTORS_LEG": 3,
+    "NLEG": 4,
+    "TINIT": 1000,
+    "ENCODING": "indirect"
+  },
+  "RBF": {
+    "SIGMA": 0.04
+  },
+  "CPG": {
+    "GAMMA": 1.01,
+    "PHI": 0.06
+  },
+  "UTILS": {
+    "STEPS_INIT": 250,
+    "SHOW_GRAPHIC": false
+  }
+}
