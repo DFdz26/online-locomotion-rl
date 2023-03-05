@@ -5,12 +5,13 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 
+
 class PIBB(object):
     def __init__(self, _rollouts, _h, _decay_h, _noise_len, decay, variance, device="cpu", boost_noise=1):
         self.device = device
-        self.rollouts   = _rollouts
-        self.h          = _h
-        self.decay_h    = _decay_h
+        self.rollouts = _rollouts
+        self.h = _h
+        self.decay_h = _decay_h
         self.variance = variance
 
         self.decay = decay
@@ -20,8 +21,8 @@ class PIBB(object):
         self.s_norm = torch.ones(_rollouts, dtype=torch.float32, device=self.device, requires_grad=False)
         self.cost_weighted_noise = torch.zeros(_noise_len, dtype=torch.float32, device=self.device, requires_grad=False)
 
-        self.noise_arr = torch.zeros([_rollouts, _noise_len], dtype=torch.float32, device=device, requires_grad=False).normal_(mean=0., std=math.sqrt(variance) * boost_noise)
-
+        self.noise_arr = torch.zeros([_rollouts, _noise_len], dtype=torch.float32, device=device,
+                                     requires_grad=False).normal_(mean=0., std=math.sqrt(variance) * boost_noise)
 
     def get_p(self):
         return self.p
@@ -45,10 +46,10 @@ class PIBB(object):
             "h": self.h
         }
 
-        if not(self.decay is None):
+        if not (self.decay is None):
             hyp["decay"] = self.decay
 
-        if not(self.variance_ex is None):
+        if not (self.variance_ex is None):
             hyp["variance"] = self.variance_ex
 
         return hyp
@@ -66,14 +67,12 @@ class PIBB(object):
         print(f"variance: {self.variance}")
         print(f"Total time (s): {total_time}")
         print(f"Rollout time (s): {rollout_time}")
-        print("=============================")                
-
+        print("=============================")
 
     def _compute_s_norm_(self, fitness_arr, max_fitness, min_fitness):
 
         for k in range(self.rollouts):
             self.s_norm[k] = math.exp(self.h * ((fitness_arr[k] - min_fitness) / (max_fitness - min_fitness)))
-        
 
     def step(self, fitness_arr, _parameter_arr):
         parameter_arr = _parameter_arr.detach().clone().to(self.device).flatten()
@@ -92,7 +91,7 @@ class PIBB(object):
 
         # Compute probability for each roll-out
         for k in range(self.rollouts):
-            p = self.s_norm[k]/total_s
+            p = self.s_norm[k] / total_s
             # Cost-weighted averaging
             self.cost_weighted_noise = p * self.noise_arr[k]
             # noise_arr[k]    = [x * self.p[k] for x in noise_arr[k]]
@@ -106,8 +105,8 @@ class PIBB(object):
 
     def post_step(self):
         # Decay h (1/λ) / variance as learning progress
-        self.h = self.decay_h * (1/self.h)
-        self.h = (1/self.h)
+        self.h = self.decay_h * (1 / self.h)
+        self.h = (1 / self.h)
 
         self.variance *= self.decay
         self.genere_noise_arr()

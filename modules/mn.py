@@ -1,4 +1,4 @@
-'''
+"""
 Class: MN
 created by: arthicha srisuchinnawong
 Modified by: Daniel Fernandez
@@ -6,30 +6,30 @@ e-mail: dafer21@student.sdu.dk
 date last modification: 5-01-23
 
 Motor Neuron
-'''
-
+"""
 
 # ------------------- import modules ---------------------
 
 # standard modules
 import time, sys, os
 from copy import deepcopy
-import colorama 
+import colorama
+
 colorama.init(autoreset=True)
 from colorama import Fore
 import os.path
 import pickle
 
 # math-related modules
-import numpy as np # cpu array
-import torch # cpu & gpu array
+import numpy as np  # cpu array
+import torch  # cpu & gpu array
 import torch as T
 from torch.distributions import Normal, Categorical
 
 # modular network
 from modules.torchNet import torchNet
 
-#plot
+# plot
 import matplotlib.pyplot as plt
 
 # ------------------- configuration variables ---------------------
@@ -42,128 +42,121 @@ motor neurons: M[t] = 2.0*tanh(k W B[t])
 cacheFileName = "cache"
 caccheExtension = ".pickle"
 
-class MN(torchNet):	
 
-	# -------------------- constructor -----------------------
-	# (private)
+class MN(torchNet):
 
-	def __init__(self,hyperparams, outputgain=None, bias=False, device=None, dimensions=1, load_cache=True, abs_weights=False):
+    # -------------------- constructor -----------------------
+    # (private)
 
-		# initialize network hyperparameter
-		super().__init__(device)
-		self.folder_cache = "cache_init_values"
+    def __init__(self, hyperparams, outputgain=None, bias=False, device=None, dimensions=1, load_cache=True,
+                 abs_weights=False):
 
-		# device
-		if device is not None:
-			self.device = device
-		elif torch.cuda.is_available():
-			self.device = torch.device('cuda')
-		else:
-			self.device = torch.device('cpu')
+        # initialize network hyperparameter
+        super().__init__(device)
+        self.folder_cache = "cache_init_values"
 
-		self.__n_state = hyperparams["n_state"]
-		self.__n_out = hyperparams["n_out"]
-		self.encoding = hyperparams["encoding"]
-		self.__n_bias = 1 if bias else 0
-		self.dimensions = dimensions
+        # device
+        if device is not None:
+            self.device = device
+        elif torch.cuda.is_available():
+            self.device = torch.device('cuda')
+        else:
+            self.device = torch.device('cpu')
 
-		if not os.path.exists(self.folder_cache):
-			self.create_folder()
+        self.__n_state = hyperparams["n_state"]
+        self.__n_out = hyperparams["n_out"]
+        self.encoding = hyperparams["encoding"]
+        self.__n_bias = 1 if bias else 0
+        self.dimensions = dimensions
 
-		self.full_cacheFilename = os.path.join(self.folder_cache, cacheFileName + "_" + self.encoding + caccheExtension)
+        if not os.path.exists(self.folder_cache):
+            self.create_folder()
 
-		# initialize connection weight
-		# self.W = self.zeros(self.__n_state+self.__n_bias,self.__n_out,grad=True)
-		if os.path.exists(self.full_cacheFilename) and load_cache:
-			self._load_cache_()
-		else:
-			self.W = 2*torch.rand(self.__n_state+self.__n_bias,self.__n_out, requires_grad=False, device=self.device) - 1
-			
-			if load_cache:
-				self._create_cache_()
+        self.full_cacheFilename = os.path.join(self.folder_cache, cacheFileName + "_" + self.encoding + caccheExtension)
 
-		if abs_weights:
-			self.W = torch.abs(self.W)
+        # initialize connection weight
+        # self.W = self.zeros(self.__n_state+self.__n_bias,self.__n_out,grad=True)
+        if os.path.exists(self.full_cacheFilename) and load_cache:
+            self._load_cache_()
+        else:
+            self.W = 2 * torch.rand(self.__n_state + self.__n_bias, self.__n_out, requires_grad=False,
+                                    device=self.device) - 1
 
-		self.Wn = torch.zeros((dimensions,self.__n_state+self.__n_bias,self.__n_out), device=self.device)
-		self.Wn = torch.add(self.W, self.Wn)
+            if load_cache:
+                self._create_cache_()
 
-		self.reset()
+        if abs_weights:
+            self.W = torch.abs(self.W)
 
-		# normalize all joints -> output gain
-		
-		self.__output_gain = self.zeros(1,self.__n_out * dimensions) + 1.0 if outputgain is None else self.torch(outputgain)
-		self.__output_gain = torch.reshape(self.__output_gain,(dimensions, self.__n_out))
+        self.Wn = torch.zeros((dimensions, self.__n_state + self.__n_bias, self.__n_out), device=self.device)
+        self.Wn = torch.add(self.W, self.Wn)
 
-	def create_folder(self):
+        self.reset()
 
-		os.mkdir(self.folder_cache)
+        # normalize all joints -> output gain
 
-	def _load_cache_(self):
-		print("loaded cache")
-		with open(self.full_cacheFilename, 'rb') as f:
-			self.W = pickle.load(f)
-	
-	def _create_cache_(self):
-		
-		print("stored cache")
-		with open(self.full_cacheFilename, 'wb') as f:
-			pickle.dump(self.W, f)
+        self.__output_gain = self.zeros(1, self.__n_out * dimensions) + 1.0 if outputgain is None else self.torch(
+            outputgain)
+        self.__output_gain = torch.reshape(self.__output_gain, (dimensions, self.__n_out))
 
-	def load_weights(self, nw, update_Wn=True):
-		W_init = torch.FloatTensor(nw).to(self.device)
-		print(W_init)
-		print(self.W.shape)
-		self.W = torch.reshape(W_init, self.W.shape)
+    def create_folder(self):
 
-		if update_Wn:
-			self.Wn = torch.zeros((self.dimensions,self.__n_state+self.__n_bias,self.__n_out), device=self.device)
-			self.Wn = torch.add(self.W, self.Wn)
+        os.mkdir(self.folder_cache)
 
-	def get_w_arr_(self):
-		return self.W.squeeze()
+    def _load_cache_(self):
+        print("loaded cache")
+        with open(self.full_cacheFilename, 'rb') as f:
+            self.W = pickle.load(f)
 
-	# -------------------- set values -----------------------
-	# (public)
+    def _create_cache_(self):
 
-	def apply_noise_tensor(self, noise):
-		# print(f"noise {noise}")
-		noise_a = torch.reshape(noise,self.Wn.shape)
-		self.Wn = self.W + noise_a
+        print("stored cache")
+        with open(self.full_cacheFilename, 'wb') as f:
+            pickle.dump(self.W, f)
 
+    def load_weights(self, nw, update_Wn=True):
+        W_init = torch.FloatTensor(nw).to(self.device)
+        print(W_init)
+        print(self.W.shape)
+        self.W = torch.reshape(W_init, self.W.shape)
 
-	def apply_noise_np(self,noise):
-		print(f"noise {noise}")
-		noise_a = torch.FloatTensor(noise).to(self.device)
-		noise_a = torch.reshape(noise_a,self.Wn.shape)
-		self.Wn = self.W + noise_a
+        if update_Wn:
+            self.Wn = torch.zeros((self.dimensions, self.__n_state + self.__n_bias, self.__n_out), device=self.device)
+            self.Wn = torch.add(self.W, self.Wn)
 
-	def apply_noise(self,noise):
-		self.Wn = self.W + noise
+    def get_w_arr_(self):
+        return self.W.squeeze()
 
-	# -------------------- handle functions -----------------------
-	# (public)
+    # -------------------- set values -----------------------
+    # (public)
 
-	def reset(self):
-		# reset connection
-		pass
+    def apply_noise_tensor(self, noise):
+        # print(f"noise {noise}")
+        noise_a = torch.reshape(noise, self.Wn.shape)
+        self.Wn = self.W + noise_a
 
-	def forward(self,x):
-		if self.__n_bias > 0:
-			shape = list(x.shape)
-			shape[-1] = 1
-			x1 = torch.cat([x,torch.ones(shape).to(self.device)],dim=-1)
-		else:
-			x1 = x
-		outputs = 1 * torch.tanh( (x1@self.Wn)).reshape(self.dimensions, self.__n_out)
-		return outputs
+    def apply_noise_np(self, noise):
+        print(f"noise {noise}")
+        noise_a = torch.FloatTensor(noise).to(self.device)
+        noise_a = torch.reshape(noise_a, self.Wn.shape)
+        self.Wn = self.W + noise_a
 
+    def apply_noise(self, noise):
+        self.Wn = self.W + noise
 
+    # -------------------- handle functions -----------------------
+    # (public)
 
+    def reset(self):
+        # reset connection
+        pass
 
-	
-		
-
-
-
-
+    def forward(self, x):
+        if self.__n_bias > 0:
+            shape = list(x.shape)
+            shape[-1] = 1
+            x1 = torch.cat([x, torch.ones(shape).to(self.device)], dim=-1)
+        else:
+            x1 = x
+        outputs = 1 * torch.tanh((x1 @ self.Wn)).reshape(self.dimensions, self.__n_out)
+        return outputs

@@ -11,6 +11,7 @@ import json
 mpl.use('qt5agg')
 root_run_folder_name = "runs"
 
+
 class data_store:
     def __init__(self):
         self.record = -99999
@@ -42,14 +43,15 @@ class data_store:
 
 
 class Logger:
-    def __init__(self, save=False, frequency=20, frequency_plot=5, robot="", nn_config=None, PIBB_param=None,test_value=False, size_figure=2):
+    def __init__(self, save=False, frequency=20, frequency_plot=5, robot="", nn_config=None, PIBB_param=None,
+                 test_value=False, size_figure=2):
         self.save_data = save
         self.nn_config = nn_config
         self.PIBB_param = PIBB_param
         self.test_value = test_value
         self.size_figure = size_figure
         self.filename = None
-        
+
         if not path.exists(root_run_folder_name):
             os.mkdir(root_run_folder_name)
 
@@ -91,7 +93,6 @@ class Logger:
         if robot != "":
             self.set_robot_name(robot)
 
-
     def recover_nn_information(self):
         self.folder = os.path.dirname(self.filename)
         nn_info_file = os.path.join(self.folder, "nn_config.json")
@@ -124,7 +125,7 @@ class Logger:
             if not path.exists(path_to_check):
                 os.mkdir(path_to_check)
 
-            self.folder = os.path.join(path_to_check, self.folder_time)     
+            self.folder = os.path.join(path_to_check, self.folder_time)
 
     def save_points_testing(self, distance, time):
         self.distance.append(float(torch.mean(distance)))
@@ -144,7 +145,7 @@ class Logger:
             self.ax.set_title("Distance vs time")
             self.ax.set_xlabel("Time (s)")
             self.ax.set_ylabel("Distance (m)")
-            
+
             self.ax.plot(xpoints, ypoints)
         else:
             xpoints = np.array(self.x_axis)
@@ -153,7 +154,7 @@ class Logger:
             self.ax[0].set_title("Avg. reward vs iteration")
             self.ax[0].set_xlabel("Iteration")
             self.ax[0].set_ylabel("Reward")
-            
+
             self.ax[0].plot(xpoints, ypoints)
             ypoints = np.array(self.mean_distances)
 
@@ -178,12 +179,11 @@ class Logger:
             }
 
             filename = "learning_graph_data.json"
-        
+
         file_graph_data = os.path.join(self.folder, filename)
 
         with open(file_graph_data, "w") as f:
             json.dump(dic, f, indent=2)
-
 
     def log(self, save=True, block=True, plot_file_name="", save_datapoint=False):
 
@@ -194,7 +194,7 @@ class Logger:
         fig.set_size_inches(18.5, 10.5)
         if save:
             plt.savefig(os.path.join(self.folder, plot_file_name + ".png"), dpi=100)
-        
+
         if save_datapoint:
             self.__save_datapoints__()
 
@@ -202,12 +202,13 @@ class Logger:
         plt.show(block=block)
         plt.pause(0.001)
 
-    def store_data(self, distance, reward, weight, noise, iteration, total_time, std_height, show_plot=False, pause=False):
+    def store_data(self, distance, reward, weight, noise, iteration, total_time, std_height, show_plot=False,
+                   pause=False):
 
         mean_reward = float(torch.mean(reward))
-        mean_distance= float(torch.mean(distance))
-        std_height_mean = float(torch.mean(std_height)) if not(std_height is None) else None
-        
+        mean_distance = float(torch.mean(distance))
+        std_height_mean = float(torch.mean(std_height)) if not (std_height is None) else None
+
         if (iteration % self.frequency_plot) == 0:
             self.x_axis.append(iteration)
             self.mean_distances.append(mean_distance)
@@ -216,7 +217,6 @@ class Logger:
 
             if show_plot:
                 self.log(False, pause)
-
 
         if self.save_data:
             new_data = {
@@ -228,12 +228,13 @@ class Logger:
                 "min_distance": float(torch.min(distance)),
                 "mean_distance": mean_distance,
             }
-            
+
             for k in new_data:
-                self.renew_data[k] = self.stored_info[k].store_weights(new_data[k], weight, noise, iteration, total_time, torch.argmax(distance))
+                self.renew_data[k] = self.stored_info[k].store_weights(new_data[k], weight, noise, iteration,
+                                                                       total_time, torch.argmax(distance))
 
     def store_data_post(self, weights):
-        
+
         for k in self.renew_data:
             if self.renew_data[k]:
                 self.renew_data[k] = self.stored_info[k].store_weights_post(weights)
@@ -244,39 +245,40 @@ class Logger:
     def __save_nn_config(self):
         with open(os.path.join(self.folder, "nn_config.json"), "w") as f:
             json.dump(self.nn_config, f, indent=2)
-        
+
         self.nn_config = None
 
     def __save_PIBB_param(self):
         with open(os.path.join(self.folder, "pibb_param.json"), "w") as f:
             json.dump(self.PIBB_param, f, indent=2)
-        
+
         self.PIBB_param = None
 
     def __save_rewards_param(self):
         with open(os.path.join(self.folder, "rewards_param.json"), "w") as f:
             json.dump(self.rewards_weights, f, indent=2)
-        
+
         self.rewards_weights = None
-    
-    def save_stored_data(self, force=False, actual_weight=None, actual_reward=None, iteration=None, total_time=None, noise=None, index=0):
-        
+
+    def save_stored_data(self, force=False, actual_weight=None, actual_reward=None, iteration=None, total_time=None,
+                         noise=None, index=0):
+
         if not self.save_data:
             return False
 
-        if not(force or 0 == (iteration % self.frequency)):
+        if not (force or 0 == (iteration % self.frequency)):
             return False
 
         if not path.exists(self.folder):
             self.create_folder()
 
-        if not(self.nn_config is None):
+        if not (self.nn_config is None):
             self.__save_nn_config()
 
-        if not(self.PIBB_param is None):
+        if not (self.PIBB_param is None):
             self.__save_PIBB_param()
 
-        if not(self.rewards_weights is None):
+        if not (self.rewards_weights is None):
             self.__save_rewards_param()
 
         for k in self.stored_info:
@@ -303,5 +305,3 @@ class Logger:
                 pickle.dump(temp, f)
 
         return True
-
-

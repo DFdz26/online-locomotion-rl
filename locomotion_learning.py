@@ -25,21 +25,21 @@ LOAD_CACHE = False
 reward_list = {
     "x_distance": {
         "weight": 1.6,
-        "reward_data" : {
+        "reward_data": {
             "absolute_distance": False
         }
     },
 
     "y_distance": {
         "weight": -1.,
-        "reward_data" : {
+        "reward_data": {
             "absolute_distance": True
         }
     },
 
     "stability": {
         "weight": -1.1,
-        "reward_data" : {
+        "reward_data": {
             "absolute_distance": False,
             "weights": {
                 "std_height": 1.3,
@@ -53,7 +53,7 @@ reward_list = {
 
     "high_penalization_contacts": {
         "weight": -1.,
-        "reward_data" : {
+        "reward_data": {
             "absolute_distance": False,
             "max_clip": 2.5,
             "weights": {
@@ -65,7 +65,7 @@ reward_list = {
 
     "height_error": {
         "weight": -1.,
-        "reward_data" : {
+        "reward_data": {
             "max_clip": 2.5,
         }
     },
@@ -112,7 +112,7 @@ rbf_param = {
 
 config = {
     "device": "cuda",
-    "HYPERPARAM" : hyperparam,
+    "HYPERPARAM": hyperparam,
     "RBF": rbf_param,
     "CPG": cpg_param,
     "UTILS": cpg_utils
@@ -128,7 +128,7 @@ logger = Logger(save=SAVE_DATA, frequency=10, PIBB_param=pibb.get_hyper_paramete
 env_config = EnvConfig()
 
 
-def config_env ():
+def config_env():
     env_config.num_env = rollouts
     env_config.actions_scale = actions_scale
     env_config.hip_scale = hip_scale
@@ -146,4 +146,3 @@ try:
 except KeyboardInterrupt:
     if not logged:
         logger.log(SAVE_DATA, True, plot_file_name=graph_name, save_datapoint=SAVE_DATA)
-

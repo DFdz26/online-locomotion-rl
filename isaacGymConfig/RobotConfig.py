@@ -8,9 +8,9 @@ import numpy as np
 import torch
 from .BaseConfiguration import BaseConfiguration
 
-from .Rewards import rep_keyword, root_keyword, initial_keyword, projected_gravity_keyword, contact_forces_gravity_keyword
+from .Rewards import rep_keyword, root_keyword, initial_keyword, projected_gravity_keyword, \
+    contact_forces_gravity_keyword
 from .Rewards import termination_contact_indices_keyword, penalization_contact_indices_keyword, goal_height_keyword
-
 
 import time
 
@@ -31,7 +31,7 @@ def convert_drive_mode(mode_str):
     return mode
 
 
-class RobotConfig (BaseConfiguration):
+class RobotConfig(BaseConfiguration):
     def __init__(self, config_file, env_config, nn, learning_algorithm, logger, rewards):
         with open(config_file) as f:
             self.cfg = json.load(f)
@@ -54,7 +54,7 @@ class RobotConfig (BaseConfiguration):
         self.learning_algorithm = learning_algorithm
         self.without_learning = True if self.learning_algorithm is None else False
         self.rewards = rewards
-        self.config_intial_position = [self.cfg["asset_options"]["initial_postion"][axis] 
+        self.config_intial_position = [self.cfg["asset_options"]["initial_postion"][axis]
                                        for axis in self.cfg["asset_options"]["initial_postion"]]
 
         if self.env_config.test_joints and self.env_config.test_config.height > 0.:
@@ -62,7 +62,7 @@ class RobotConfig (BaseConfiguration):
 
         self.starting_training_time = 0
         self.starting_rollout_time = 0
-        
+
         self.actual_time = 0
 
         super().__init__(self.cfg, self.env_config.dt)
@@ -74,14 +74,15 @@ class RobotConfig (BaseConfiguration):
         self.finished = None
         self.logger = logger
 
-        if not(None is self.logger):
+        if not (None is self.logger):
             self.logger.set_robot_name(self.asset_name)
-        
+
         self.rollout_time = self.env_config.rollout_time
 
         self.goal_height = self.cfg["asset_options"]["goal_height"]
 
-        self.default_joint_angles = self.cfg["asset_options"]["default_joint_angles"] if self.env_config.default_joints_angles is None else self.env_config.default_joints_angles
+        self.default_joint_angles = self.cfg["asset_options"][
+            "default_joint_angles"] if self.env_config.default_joints_angles is None else self.env_config.default_joints_angles
         self.default_dof_pos_in = torch.FloatTensor([default_pos] * self.num_envs).to(self.device)
 
         self.num_dof = None
@@ -115,35 +116,35 @@ class RobotConfig (BaseConfiguration):
 
         self.pretraining_process_applied = False
         self.default_pose = True
-        
+
     def __create_plane(self):
         plane_params = gymapi.PlaneParams()
         plane_params.normal = gymapi.Vec3(0, 0, 1)
         self.gym.add_ground(self.sim, plane_params)
 
     def _reset_root(self):
-        
-        env_ids = torch.ones(self.num_envs, dtype=torch.bool, device=self.device,
-                                   requires_grad=False).nonzero(as_tuple=False).flatten()
 
-        self.root_states[env_ids] = 0.         
-        
+        env_ids = torch.ones(self.num_envs, dtype=torch.bool, device=self.device,
+                             requires_grad=False).nonzero(as_tuple=False).flatten()
+
+        self.root_states[env_ids] = 0.
+
         self.root_states[env_ids, :3] = self.started_position[env_ids]
 
-        a = [0., 0., 0., 1] 
+        a = [0., 0., 0., 1]
         self.root_states[env_ids, 3:7] = torch.FloatTensor(a).to(self.device)
 
         env_ids_int32 = env_ids.to(dtype=torch.int32)
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
                                                      gymtorch.unwrap_tensor(self.root_states),
                                                      gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
-        
+
         self.default_pose = True
 
     def _reset_dofs(self):
 
         env_ids = torch.ones(self.num_envs, dtype=torch.bool, device=self.device,
-                            requires_grad=False).nonzero(as_tuple=False).flatten()
+                             requires_grad=False).nonzero(as_tuple=False).flatten()
 
         self.dof_state[env_ids] = 0.
 
@@ -161,7 +162,7 @@ class RobotConfig (BaseConfiguration):
         self._reset_dofs()
 
     def post_step(self):
-        
+
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
         self.gym.refresh_dof_state_tensor(self.sim)
@@ -179,12 +180,13 @@ class RobotConfig (BaseConfiguration):
         if not self.env_config.test_joints:
 
             self.counter_episode += 1
-            self.foot_positions = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 0:3]
-            
-            max_length = self.rollout_time/self.env_config.dt
+            self.foot_positions = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices,
+                                  0:3]
+
+            max_length = self.rollout_time / self.env_config.dt
             self.counter_episode %= max_length
             self.rep += 1
-            
+
             if self.limits is None:
                 self.limits = self.__check_pos_limit()
             else:
@@ -202,13 +204,14 @@ class RobotConfig (BaseConfiguration):
             }
 
             self.rewards.compute_rewards_in_state(simulation_info)
-            touching = self.rewards.high_penalization_contacts if hasattr(self.rewards, 'high_penalization_contacts') else None
+            touching = self.rewards.high_penalization_contacts if hasattr(self.rewards,
+                                                                          'high_penalization_contacts') else None
             self.finished |= torch.all(self.limits > 1., dim=0)
 
-            if not(None is touching):
+            if not (None is touching):
                 self.finished |= torch.all(touching > 1., dim=0)
-            
-            all_touching = torch.all(touching > 1, dim=0) if not(None is touching) else False
+
+            all_touching = torch.all(touching > 1, dim=0) if not (None is touching) else False
             all_limits = torch.all(self.limits > 1., dim=0)
 
             if all_touching or all_limits:
@@ -223,17 +226,18 @@ class RobotConfig (BaseConfiguration):
                 distance = self.rewards.x_distance
 
                 print(f"rewards: {rewards}")
-                
+
                 std_height = self.rewards.std_height if hasattr(self.rewards, 'std_height') else None
 
                 if not self.without_learning:
                     noise_bef = None if None == self.learning_algorithm.get_noise() else self.learning_algorithm.get_noise().detach().clone()
-                    self.logger.store_data(self.root_states[:,0], rewards, self.nn.get_weights(), noise_bef, self.n_step, total_time, std_height, show_plot=True)
+                    self.logger.store_data(self.root_states[:, 0], rewards, self.nn.get_weights(), noise_bef,
+                                           self.n_step, total_time, std_height, show_plot=True)
 
                     best_index = torch.argmax(distance)
 
                     if self.rollout == 0:
-                        self.learning_algorithm.print_info(rewards, self.n_step, total_time, 
+                        self.learning_algorithm.print_info(rewards, self.n_step, total_time,
                                                            self.actual_time - self.starting_rollout_time)
                         self.nn.train_modify_weights(self.learning_algorithm, rewards)
 
@@ -241,15 +245,15 @@ class RobotConfig (BaseConfiguration):
 
                         print(f"weights: {self.nn.get_weights()}")
                 else:
-                    self.logger.save_points_testing(distance, total_time)                
+                    self.logger.save_points_testing(distance, total_time)
 
                 self.reset_envs()
                 self.pretraining_process_applied = False
 
                 if not self.without_learning:
                     self.logger.store_data_post(self.nn.get_weights())
-                    self.logger.save_stored_data(actual_weight=self.nn.get_weights(), actual_reward=rewards, 
-                                                 iteration=self.n_step, total_time=total_time, noise=noise_bef, 
+                    self.logger.save_stored_data(actual_weight=self.nn.get_weights(), actual_reward=rewards,
+                                                 iteration=self.n_step, total_time=total_time, noise=noise_bef,
                                                  index=best_index)
 
                 self.limits = None
@@ -340,7 +344,6 @@ class RobotConfig (BaseConfiguration):
                 self.p_gains[i] = 0.
                 self.d_gains[i] = 0.
                 print(f"PD gain of joint {name} were not defined, setting them to zero")
-                
 
         self.joint_pos_target = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
         self.joint_pos_target = self.joint_pos_target.unsqueeze(0)
@@ -358,7 +361,7 @@ class RobotConfig (BaseConfiguration):
         self.termination_contact_indices = torch.zeros(len(termination_contact_names), dtype=torch.long,
                                                        device=self.device, requires_grad=False)
         self.penalization_contact_indices = torch.zeros(len(penalization_contact_names), dtype=torch.long,
-                                                       device=self.device, requires_grad=False)
+                                                        device=self.device, requires_grad=False)
         for i in range(len(termination_contact_names)):
             self.termination_contact_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0],
                                                                                         self.robot_handles[0],
@@ -366,16 +369,16 @@ class RobotConfig (BaseConfiguration):
 
         for i in range(len(penalization_contact_names)):
             self.penalization_contact_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0],
-                                                                                        self.robot_handles[0],
-                                                                                        penalization_contact_names[i])
+                                                                                         self.robot_handles[0],
+                                                                                         penalization_contact_names[i])
 
         feet_names = [s for s in body_names if self.cfg["asset_options"]["foot_contacts_on"] in s]
         self.feet_indices = torch.zeros(len(feet_names), dtype=torch.long, device=self.device, requires_grad=False)
         for i in range(len(feet_names)):
-            self.feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], 
+            self.feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0],
                                                                          self.robot_handles[0],
                                                                          feet_names[i])
-        
+
         self.foot_velocities = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:,
                                self.feet_indices,
                                7:10]
@@ -408,7 +411,7 @@ class RobotConfig (BaseConfiguration):
             actions_scaled = actions[:, :12] * self.env_config.actions_scale
             for i in [0, 3, 6, 9]:
                 actions_scaled[:, i] *= self.env_config.hip_scale
-            
+
             self.desired_config = self.default_dof_pos + actions_scaled
 
             self.controller_error = (self.desired_config - self.dof_pos)
@@ -433,7 +436,7 @@ class RobotConfig (BaseConfiguration):
             if not self.pretraining_process_applied and not self.without_learning:
                 self.nn.pretraing_process(self.learning_algorithm)
                 self.pretraining_process_applied = True
-            
+
             out_cbn = self.nn.forward(None)
 
             self.step(test_data=None, actions=out_cbn, position_control=self.env_config.position_control)
@@ -449,23 +452,21 @@ class RobotConfig (BaseConfiguration):
         dangerous_space += (self.dof_pos - self.upper_limit_safe[:]).clip(min=0.)
 
         return torch.sum(dangerous_space, dim=1)
-        
 
     def move_dofs(self, test_data, actions=None, position_control=True):
         self.controller(test_data, actions, default=self.default_pose, position_control=position_control)
 
         if self.env_config.test_joints and self.env_config.joint_to_test > 0:
             print(f"self.desired_config: {self.desired_config[self.env_config.joint_to_test]}, "
-                    f"self.dof_pos {self.dof_pos[0][self.env_config.joint_to_test]}, "
-                    f"self.torques: {self.torques[0][self.env_config.joint_to_test]}")
+                  f"self.dof_pos {self.dof_pos[0][self.env_config.joint_to_test]}, "
+                  f"self.torques: {self.torques[0][self.env_config.joint_to_test]}")
 
         # print(f"torques: {self.torques}")
 
         self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self.torques))
-        
+
     def step(self, test_data=None, actions=None, position_control=True):
         if not self.gym.query_viewer_has_closed(self.viewer):
-
             self.move_dofs(test_data, actions, position_control=position_control)
 
             # step the physics
@@ -517,8 +518,8 @@ class RobotConfig (BaseConfiguration):
         self.robot_assets = self.gym.load_asset(self.sim, self.asset_root, self.asset_file, asset_options)
 
         if self.robot_assets is None:
-                print("*** Failed to load asset '%s' from '%s'" % (self.asset_file, self.asset_root))
-                quit()
+            print("*** Failed to load asset '%s' from '%s'" % (self.asset_file, self.asset_root))
+            quit()
 
         self.num_dof = self.gym.get_asset_dof_count(self.robot_assets)
         self.num_bodies = self.gym.get_asset_rigid_body_count(self.robot_assets)
@@ -533,14 +534,13 @@ class RobotConfig (BaseConfiguration):
             self.default_dof_pos[i] = angle
 
         self.lower_limit = self.dof_prop_assets['lower']
-        
-        self.upper_limit = self.dof_prop_assets['upper']
 
+        self.upper_limit = self.dof_prop_assets['upper']
 
     def _process_rigid_body_props(self, body_prop, n_env):
         # TODO: Changing the mass of the robot
 
-        return body_prop   
+        return body_prop
 
     def __create_robot(self, num_robots, verbose=False):
         spacing = 0.0
@@ -550,27 +550,26 @@ class RobotConfig (BaseConfiguration):
         pose = gymapi.Transform()
         # pos_aux_p = [0., 0., 0.68]
         pos_aux_p = self.config_intial_position
-        pose.p = gymapi.Vec3(0., 0., 0.8)    
+        pose.p = gymapi.Vec3(0., 0., 0.8)
         pose.r = gymapi.Quat(0, 0.0, 0.0, 1)
-        
+
         self.ranges = torch.from_numpy(self.upper_limit - self.lower_limit).to(self.device)
         self.mids = torch.from_numpy(0.5 * (self.upper_limit + self.lower_limit)).to(self.device)
         self.lower_limit_cuda = torch.from_numpy(self.lower_limit).to(self.device)
         self.upper_limit_cuda = torch.from_numpy(self.upper_limit).to(self.device)
-        self.upper_limit_safe =(self.mids + self.upper_limit_cuda) * 0.5
-        self.lower_limit_safe =(self.mids + self.lower_limit_cuda) * 0.5
+        self.upper_limit_safe = (self.mids + self.upper_limit_cuda) * 0.5
+        self.lower_limit_safe = (self.mids + self.lower_limit_cuda) * 0.5
 
         default_dof_state = np.zeros(self.num_dof, gymapi.DofState.dtype)
         # default_dof_state["pos"] = self.mids
         default_dof_state["pos"] = self.default_dof_pos.cpu().numpy()
 
-        num_per_row = int(math.sqrt(num_robots))        
+        num_per_row = int(math.sqrt(num_robots))
         self.started_position = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
-
 
         if verbose:
             print("Creating %d environments" % num_robots)
-        
+
         for i in range(num_robots):
             # Create one environment
 
@@ -578,8 +577,9 @@ class RobotConfig (BaseConfiguration):
             pos_aux_p[1] = i * self.env_config.spacing_env
             self.started_position[i] = torch.FloatTensor(pos_aux_p).to(self.device)
             pose.p = gymapi.Vec3(*pos_aux_p)
-            robot_handle = self.gym.create_actor(env, self.robot_assets, pose, self.asset_name, i, 
-                                        0 if self.cfg["asset_options"]["asset_config"]["self_collision"] else 1, 0)
+            robot_handle = self.gym.create_actor(env, self.robot_assets, pose, self.asset_name, i,
+                                                 0 if self.cfg["asset_options"]["asset_config"][
+                                                     "self_collision"] else 1, 0)
             self.gym.set_actor_dof_states(env, robot_handle, default_dof_state, gymapi.STATE_ALL)
 
             dof_props = self.dof_prop_assets

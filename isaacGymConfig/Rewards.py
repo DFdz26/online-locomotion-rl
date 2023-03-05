@@ -9,6 +9,7 @@ termination_contact_indices_keyword = 'termination_contact_indices'
 penalization_contact_indices_keyword = 'penalization_contact_indices'
 goal_height_keyword = 'goal_height'
 
+
 class IndividualReward:
     def __init__(self, num_envs, device):
         self.num_envs = num_envs
@@ -17,7 +18,7 @@ class IndividualReward:
         self.x_distance = None
         self.y_distance = None
 
-###############################################################################################
+    ###############################################################################################
 
     """
     Preparation of the buffers
@@ -30,21 +31,25 @@ class IndividualReward:
         pass
 
     def _prepare_buffer_stability_term_(self):
-        self.accumulative_height = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
-        self.accumulative_height_2 = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.accumulative_height = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                               requires_grad=False)
+        self.accumulative_height_2 = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                 requires_grad=False)
         self.acc = torch.zeros([3, self.num_envs], dtype=torch.float, device=self.device, requires_grad=False)
 
     def _prepare_buffer_low_penalization_contacts_term_(self):
-        self.low_penalization_contacts = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device, requires_grad=False)
-    
+        self.low_penalization_contacts = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device,
+                                                     requires_grad=False)
+
     def _prepare_buffer_high_penalization_contacts_term_(self):
-        self.high_penalization_contacts = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device, requires_grad=False)
+        self.high_penalization_contacts = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device,
+                                                      requires_grad=False)
 
     def _prepare_buffer_height_error_term_(self):
-        self.accumulative_height_error = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.accumulative_height_error = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                     requires_grad=False)
 
-
-###############################################################################################
+    ###############################################################################################
     """
     Compue the needed calculations in every step
     """
@@ -69,22 +74,23 @@ class IndividualReward:
         contact_forces = simulation_info[contact_forces_gravity_keyword]
         penalization_contact_indices = simulation_info[penalization_contact_indices_keyword]
 
-        self.low_penalization_contacts += torch.any(torch.norm(contact_forces[:, penalization_contact_indices, :], dim=-1) > 1., dim=1)
+        self.low_penalization_contacts += torch.any(
+            torch.norm(contact_forces[:, penalization_contact_indices, :], dim=-1) > 1., dim=1)
 
     def _compute_in_state_high_penalization_contacts_term_(self, simulation_info):
         contact_forces = simulation_info[contact_forces_gravity_keyword]
         termination_contact_indices = simulation_info[termination_contact_indices_keyword]
 
-        self.high_penalization_contacts += torch.any(torch.norm(contact_forces[:, termination_contact_indices, :], dim=-1) > 1., dim=1)
+        self.high_penalization_contacts += torch.any(
+            torch.norm(contact_forces[:, termination_contact_indices, :], dim=-1) > 1., dim=1)
 
     def _compute_in_state_height_error_term_(self, simulation_info):
         z_state = simulation_info[root_keyword][:, 2]
         goal_height = simulation_info[goal_height_keyword]
 
-        self.accumulative_height_error += torch.sqrt(torch.abs(z_state - goal_height))/100
+        self.accumulative_height_error += torch.sqrt(torch.abs(z_state - goal_height)) / 100
 
-
-###############################################################################################
+    ###############################################################################################
 
     def _compute_final_x_distance_term_(self, simulation_info, reward_data):
 
@@ -117,12 +123,12 @@ class IndividualReward:
         mean_y_angle_weight = weights["mean_y_angle"]
         mean_z_angle_weight = weights["mean_z_angle"]
 
-        self.std_height = torch.sqrt(self.accumulative_height/rep - torch.square(self.accumulative_height_2)/rep_2)
+        self.std_height = torch.sqrt(self.accumulative_height / rep - torch.square(self.accumulative_height_2) / rep_2)
 
-        stability = std_height_weight * self.std_height 
-        stability += mean_x_angle_weight * self.acc[0]/rep 
-        stability += mean_y_angle_weight * self.acc[1]/rep
-        stability += mean_z_angle_weight * self.acc[2]/rep
+        stability = std_height_weight * self.std_height
+        stability += mean_x_angle_weight * self.acc[0] / rep
+        stability += mean_y_angle_weight * self.acc[1] / rep
+        stability += mean_z_angle_weight * self.acc[2] / rep
 
         if "distance" in weights:
             distance = self._compute_final_x_distance_term_(simulation_info, reward_data)
@@ -164,7 +170,7 @@ class IndividualReward:
         max_clip = reward_data["max_clip"]
         return self.accumulative_height_error.clip(-max_clip, max_clip)
 
-###############################################################################################
+    ###############################################################################################
 
     def _clean_buffer_x_distance_(self):
         self.x_distance = None
@@ -186,8 +192,8 @@ class IndividualReward:
     def _clean_buffer_height_error_(self):
         self.accumulative_height_error.fill_(0)
 
+
 ###############################################################################################
-    
 
 
 class Rewards(IndividualReward):
@@ -200,44 +206,45 @@ class Rewards(IndividualReward):
 
     def prepare_buffers(self):
         for reward_name in self.reward_terms.keys():
-            getattr(self, '_prepare_buffer_' + reward_name + '_term_' )()
+            getattr(self, '_prepare_buffer_' + reward_name + '_term_')()
 
     def compute_rewards_in_state(self, simulation_info):
         for reward_name in self.reward_terms.keys():
-            getattr(self, '_compute_in_state_' + reward_name + '_term_' )(simulation_info)
+            getattr(self, '_compute_in_state_' + reward_name + '_term_')(simulation_info)
 
     def compute_final_reward(self, simulation_info):
         reward = 0
         for reward_name in self.reward_terms.keys():
             weight = self.reward_terms[reward_name]['weight']
-            reward_data = None if not ("reward_data" in self.reward_terms[reward_name]) else self.reward_terms[reward_name]['reward_data']
+            reward_data = None if not ("reward_data" in self.reward_terms[reward_name]) else \
+                self.reward_terms[reward_name]['reward_data']
 
-            individual_reward = getattr(self, '_compute_final_' + reward_name + '_term_' )(simulation_info, reward_data)
+            individual_reward = getattr(self, '_compute_final_' + reward_name + '_term_')(simulation_info, reward_data)
 
             if weight == 0.0:
                 continue
-           
+
             reward += individual_reward * weight
 
         return reward
-    
+
     def clean_buffers(self):
         for reward_name in self.reward_terms.keys():
-            getattr(self, '_clean_buffer_' + reward_name + '_' )()
+            getattr(self, '_clean_buffer_' + reward_name + '_')()
 
 
 if __name__ == "__main__":
     reward_list = {
         "x_distance": {
             "weight": 1.,
-            "reward_data" : {
+            "reward_data": {
                 "absolute_distance": True
             }
         },
 
         "y_distance": {
             "weight": -1.,
-            "reward_data" : {
+            "reward_data": {
                 "absolute_distance": True
             }
         }
@@ -264,4 +271,3 @@ if __name__ == "__main__":
     final_rew = rewards_obj.compute_final_reward(simulation_info)
 
     print(final_rew)
-    
