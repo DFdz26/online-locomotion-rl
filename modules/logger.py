@@ -93,15 +93,13 @@ class Logger:
 
 
     def recover_nn_information(self):
-        nn_info_file = os.path.join(os.path.dirname(self.filename), "nn_config.json")
+        self.folder = os.path.dirname(self.filename)
+        nn_info_file = os.path.join(self.folder, "nn_config.json")
 
         with open(nn_info_file, "r") as f:
             nn_info = json.load(f)
 
         return nn_info
-    
-    def recover_PIBB_information(self):
-        pass
 
     def recover_data_class(self, filename):
         self.filename = filename
@@ -132,26 +130,6 @@ class Logger:
         self.distance.append(float(torch.mean(distance)))
         self.time.append(time)
 
-    def plot_iteration_points_testing(self, distance, iteration):
-        self.distance.append(float(torch.mean(distance)))
-        self.x_axis.append(iteration)
-
-        xpoints = np.array(self.x_axis)
-        ypoints = np.array(self.distance)
-
-        self.ax.set_title("Distance (m)")
-        
-        self.ax.plot(xpoints, ypoints)
-
-        # fig = mpl.pyplot.gcf()
-
-        # fig.set_size_inches(18.5, 10.5)
-
-        # plt.pause(0.001)
-        # plt.show(block=False)
-        # plt.pause(0.001)
-
-
     def create_folder(self):
 
         if self.save_data:
@@ -163,7 +141,9 @@ class Logger:
             xpoints = np.array(self.time)
             ypoints = np.array(self.distance)
 
-            self.ax.set_title("Distance (m)")
+            self.ax.set_title("Distance vs time")
+            self.ax.set_xlabel("Time (s)")
+            self.ax.set_ylabel("Distance (m)")
             
             self.ax.plot(xpoints, ypoints)
         else:
@@ -177,30 +157,46 @@ class Logger:
             self.ax[0].plot(xpoints, ypoints)
             ypoints = np.array(self.mean_distances)
 
-
             self.ax[1].set_title("Avg. distance (m) vs iteration")
             self.ax[1].set_xlabel("Iteration")
             self.ax[1].set_ylabel("Distance (m)")
             self.ax[1].plot(xpoints, ypoints)
 
+    def __save_datapoints__(self):
+        if self.test_value:
+            dic = {
+                "time": self.time,
+                "distance": self.distance
+            }
 
-    def log(self, save=True, block=True, plot_file_name=""):
+            filename = "testing_graph_data.json"
+        else:
+            dic = {
+                "iteration": self.x_axis,
+                "mean_distance": self.mean_distances,
+                "mean_reward": self.mean_reward,
+            }
 
-        # plt.clf()
-        # plt.pause(0.001)
+            filename = "learning_graph_data.json"
+        
+        file_graph_data = os.path.join(self.folder, filename)
+
+        with open(file_graph_data, "w") as f:
+            json.dump(dic, f, indent=2)
+
+
+    def log(self, save=True, block=True, plot_file_name="", save_datapoint=False):
 
         self.plot_in_grap()
-        
-        # ypoints = np.array(self.mean_std_heigh)
-
-        # self.ax[2].set_title("Std heigh")
-        # self.ax[2].plot(xpoints, ypoints)
 
         fig = mpl.pyplot.gcf()
 
         fig.set_size_inches(18.5, 10.5)
         if save:
             plt.savefig(os.path.join(self.folder, plot_file_name + ".png"), dpi=100)
+        
+        if save_datapoint:
+            self.__save_datapoints__()
 
         plt.pause(0.001)
         plt.show(block=block)
@@ -241,7 +237,10 @@ class Logger:
         for k in self.renew_data:
             if self.renew_data[k]:
                 self.renew_data[k] = self.stored_info[k].store_weights_post(weights)
-    
+
+    def store_reward_param(self, reward_params):
+        self.rewards_weights = reward_params
+
     def __save_nn_config(self):
         with open(os.path.join(self.folder, "nn_config.json"), "w") as f:
             json.dump(self.nn_config, f, indent=2)
@@ -253,6 +252,12 @@ class Logger:
             json.dump(self.PIBB_param, f, indent=2)
         
         self.PIBB_param = None
+
+    def __save_rewards_param(self):
+        with open(os.path.join(self.folder, "rewards_param.json"), "w") as f:
+            json.dump(self.rewards_weights, f, indent=2)
+        
+        self.rewards_weights = None
     
     def save_stored_data(self, force=False, actual_weight=None, actual_reward=None, iteration=None, total_time=None, noise=None, index=0):
         
@@ -270,6 +275,9 @@ class Logger:
 
         if not(self.PIBB_param is None):
             self.__save_PIBB_param()
+
+        if not(self.rewards_weights is None):
+            self.__save_rewards_param()
 
         for k in self.stored_info:
             filename = k + "_data.pickle"
@@ -295,11 +303,5 @@ class Logger:
                 pickle.dump(temp, f)
 
         return True
-
-
-                
-            
-
-
 
 

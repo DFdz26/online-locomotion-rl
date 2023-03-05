@@ -13,13 +13,6 @@ CPG-RBFN class for locomotion learning
 
 # standard modules
 import time, sys, os
-import colorama 
-colorama.init(autoreset=True)
-from colorama import Fore
-import configparser
-
-# data logging module
-# from openpyxl import load_workbook
 
 # math-related modules
 import numpy as np # cpu array
@@ -59,14 +52,7 @@ class CPGRBFN(torchNet):
 
 		# ---------------------- initialize modular neural network ------------------------ 
 		# (update in this order)
-		
-		# hyperparameter structure
-		# self.__n_in = int(config['HYPERPARAM']['NIN'])
-		# self.__n_state = int(config['HYPERPARAM']['NSTATE'])
-		# self.__n_out = int(config['HYPERPARAM']['NOUT'])
-		# self.__t_init = int(config['HYPERPARAM']['TINIT'])
 
-		# self.__hyperparams = self.HyperParams(self.__n_state,self.__n_in,self.__n_out)
 		self._set_up_hyperparameters(config['HYPERPARAM'])
 
 		# motor gain
@@ -75,6 +61,8 @@ class CPGRBFN(torchNet):
 			mn_gain = [float(gain) for gain in mn_gain]
 		else:
 			mn_gain=None
+
+		abs_weights = config['abs_weights'] if 'abs_weights' in config else False
 
 		# ---------------------- initialize modular neural network ------------------------ 
 		# (update in this order)
@@ -86,7 +74,7 @@ class CPGRBFN(torchNet):
 		self.rbf = RBF(self.cpg,self.__n_state,sigma=float(config['RBF']['SIGMA']),tinit=self.__t_init, device=self.device)
 
 		# Motor Network
-		self.mn = MN(self.__hyperparams, outputgain=mn_gain,load=1, device=self.device, dimensions=dimensions, load_cache=load_cache)
+		self.mn = MN(self.__hyperparams, outputgain=mn_gain, device=self.device, dimensions=dimensions, load_cache=load_cache, abs_weights=abs_weights)
 
 		self.cpg_history = CPGUtils(config, self.cpg, verbose=True)
 		

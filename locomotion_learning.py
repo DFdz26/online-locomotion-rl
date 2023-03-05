@@ -19,12 +19,12 @@ graph_name = "graph_minicheeta_learning"
 # config_file = "configs/config_b1.json"
 # graph_name = "graph_b1_learning"
 
-SAVE_DATA = False
+SAVE_DATA = True
 LOAD_CACHE = False
 
 reward_list = {
     "x_distance": {
-        "weight": 1.5,
+        "weight": 1.6,
         "reward_data" : {
             "absolute_distance": False
         }
@@ -38,7 +38,7 @@ reward_list = {
     },
 
     "stability": {
-        "weight": -1.,
+        "weight": -1.1,
         "reward_data" : {
             "absolute_distance": False,
             "weights": {
@@ -62,6 +62,13 @@ reward_list = {
             }
         }
     },
+
+    "height_error": {
+        "weight": -1.,
+        "reward_data" : {
+            "max_clip": 2.5,
+        }
+    },
 }
 
 n_kernels = 20
@@ -73,8 +80,8 @@ noise_boost = 1.5
 
 show_final_graph = True
 
-encoding = "indirect"
-# encoding = "direct"
+# encoding = "indirect"
+encoding = "direct"
 
 actions_scale = 0.2
 hip_scale = 0.2
@@ -120,10 +127,12 @@ pibb = PIBB(rollouts, h, 1, n_kernels*n_out, decay, variance, device="cuda:0", b
 logger = Logger(save=SAVE_DATA, frequency=10, PIBB_param=pibb.get_hyper_parameters(), nn_config=config)
 env_config = EnvConfig()
 
+
 def config_env ():
     env_config.num_env = rollouts
     env_config.actions_scale = actions_scale
     env_config.hip_scale = hip_scale
+
 
 config_env()
 logged = False
@@ -133,8 +142,8 @@ robot = RobotConfig(config_file, env_config, cpg_rbf_nn, pibb, logger, reward_ob
 try:
     robot.run_con(True)
     logged = True
-    logger.log(SAVE_DATA, show_final_graph, plot_file_name=graph_name)
+    logger.log(SAVE_DATA, show_final_graph, plot_file_name=graph_name, save_datapoint=SAVE_DATA)
 except KeyboardInterrupt:
     if not logged:
-        logger.log(SAVE_DATA, True, plot_file_name=graph_name)
+        logger.log(SAVE_DATA, True, plot_file_name=graph_name, save_datapoint=SAVE_DATA)
 

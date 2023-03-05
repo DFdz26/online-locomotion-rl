@@ -22,7 +22,7 @@ class BaseConfiguration:
             gravity = [0., 0., -9.81]  # [m/s^2]
             up_axis = 1  # 0 is y, 1 is z
 
-            use_gpu_pipeline = True
+            use_gpu_pipeline = cfg['sim_params']['use_gpu']
 
             class physx(PrefixProto, cli=False):
                 num_threads = 10

@@ -18,6 +18,7 @@ class EnvConfig:
         self.spacing_env = -3.5
         self.max_iterations = 151
         self.dt = 0.005
+        self.disable_leg = False
         
         self.actions_scale = 0.2
         self.hip_scale = 0.5

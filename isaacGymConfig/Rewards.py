@@ -161,7 +161,8 @@ class IndividualReward:
         return high_penalization_corrected
 
     def _compute_final_height_error_term_(self, simulation_info, reward_data):
-        return self.accumulative_height_error
+        max_clip = reward_data["max_clip"]
+        return self.accumulative_height_error.clip(-max_clip, max_clip)
 
 ###############################################################################################
 
