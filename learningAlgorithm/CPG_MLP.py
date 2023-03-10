@@ -57,8 +57,13 @@ class PPO_PIBB:
         actions_PPO = self.PPO.act(observation, actions_mult=1.)
         actions_CPG = self.PIBB.act(observation) * 1.
 
+        for i in range(len(actions_PPO)):
+            
+            new = [ (actions_PPO[i] - torch.min(actions_PPO[i])) / (torch.max(actions_PPO[i]) - torch.min(actions_PPO[i])) - 0.5] * 2
+            actions_PPO[i] = new[0]
+
         print(f'actions PPO: {actions_PPO[0]}')
-        print(f'actions_CPG PPO: {actions_CPG[0]}')
+        print(f'actions_CPG: {actions_CPG[0]}')
 
         return actions_CPG + actions_PPO
 
