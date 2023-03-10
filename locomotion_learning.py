@@ -6,12 +6,21 @@ import torch
 
 from learningAlgorithm.PIBB import PIBB
 from isaacGymConfig.envConfig import EnvConfig
-from isaacGymConfig.RobotConfig import RobotConfig
+# from isaacGymConfig.RobotConfig import RobotConfig
+from .Runner import Runner
 
 from modules.cpgrbfn2 import CPGRBFN
 from modules.logger import Logger
 
 from isaacGymConfig.Rewards import Rewards
+
+
+def config_env():
+    env_config.num_env = rollouts
+    env_config.actions_scale = actions_scale
+    env_config.hip_scale = hip_scale
+    env_config.dt = dt
+
 
 config_file = "configs/config_minicheeta.json"
 graph_name = "graph_minicheeta_learning"
@@ -77,6 +86,10 @@ decay = 0.992
 h = 10
 rollouts = 15
 noise_boost = 1.5
+dt = 0.005
+seconds_iteration = 6
+max_iterations = 151
+step_env = int(seconds_iteration/dt)
 
 show_final_graph = True
 
@@ -122,25 +135,19 @@ cpg_rbf_nn = CPGRBFN(config, dimensions=rollouts, load_cache=LOAD_CACHE)
 n_out = cpg_rbf_nn.get_n_outputs()
 print(f"n_out: {n_out}")
 
-reward_obj = Rewards(rollouts, "cuda:0", reward_list)
+reward_obj = Rewards(rollouts, "cuda:0", reward_list, 1)
 pibb = PIBB(rollouts, h, 1, n_kernels*n_out, decay, variance, device="cuda:0", boost_noise=noise_boost)
 logger = Logger(save=SAVE_DATA, frequency=10, PIBB_param=pibb.get_hyper_parameters(), nn_config=config)
 env_config = EnvConfig()
 
-
-def config_env():
-    env_config.num_env = rollouts
-    env_config.actions_scale = actions_scale
-    env_config.hip_scale = hip_scale
-
-
 config_env()
 logged = False
 
-robot = RobotConfig(config_file, env_config, cpg_rbf_nn, pibb, logger, reward_obj)
+robot = Runner(cpg_rbf_nn, pibb, logger, config_file, env_config, reward_obj, n_out,
+               verbose=True, store_observations=False)
 
 try:
-    robot.run_con(True)
+    robot.learn(max_iterations, step_env)
     logged = True
     logger.log(SAVE_DATA, show_final_graph, plot_file_name=graph_name, save_datapoint=SAVE_DATA)
 except KeyboardInterrupt:

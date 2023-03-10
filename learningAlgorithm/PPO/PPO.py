@@ -46,6 +46,10 @@ class PPO:
 
         self.learning_rate = PPOArgs.learning_rate
 
+    def prepare_training(self, env_class, steps_per_iteration, num_observations, num_actions, policy):
+        self.init_memory(env_class.num_env, steps_per_iteration, num_observations, num_actions)
+        self.train_mode()
+
     def init_memory(self, num_envs, num_step_simulations_per_env, actor_obs_shape, action_shape):
         self.memory = Memory(num_envs, num_step_simulations_per_env, actor_obs_shape, action_shape, self.device)
 
@@ -67,6 +71,12 @@ class PPO:
         self.step_simulation.critic_observations = observation
         return self.step_simulation.actions
 
+    def post_step_simulation(self, obs, actions, reward, dones, info, closed_simulation):
+        if info is None:
+            info = []
+
+        self.process_env_step(reward, dones, info)
+
     def process_env_step(self, rewards, dones, infos):
         self.step_simulation.rewards = rewards.clone()
         self.step_simulation.dones = dones
@@ -81,15 +91,26 @@ class PPO:
         self.step_simulation.clear()
         self.actor_critic.reset()
 
-    # TODO: Review
-    def compute_returns(self, last_critic_obs):
+    def last_step(self, last_critic_obs):
         last_values = self.actor_critic.evaluate(last_critic_obs).detach()
         self.memory.compute_returns(last_values, PPOArgs.gamma, PPOArgs.lam)
 
-    def update(self):
+    @staticmethod
+    def print_info(rw, rep, total_time, rollout_time, loss):
+        mean_fitness = float(torch.mean(rw))
+
+        print("=============================")
+        print(f"Rep: {rep}")
+        print(f"Mean fitness: {mean_fitness}")
+        print(f"Value loss: {loss['mean_value_loss']}", end="\t")
+        print(f"Surrogate loss: {loss['mean_surrogate_loss']}")
+        print(f"Total time (s): {total_time}")
+        print(f"Rollout time (s): {rollout_time}")
+        print("=============================")
+
+    def update(self, policy, rewards):
         mean_value_loss = 0
         mean_surrogate_loss = 0
-        mean_adaptation_module_loss = 0
 
         for obs_batch, critic_obs_batch, actions_batch, target_values_batch, advantages_batch, \
             returns_batch, old_actions_log_prob_batch, old_mu_batch, \
@@ -149,4 +170,9 @@ class PPO:
         mean_surrogate_loss /= num_updates
         self.memory.clear()
 
-        return mean_value_loss, mean_surrogate_loss, mean_adaptation_module_loss
+        return {"mean_value_loss": mean_value_loss,
+                "mean_surrogate_loss": mean_surrogate_loss}
+
+    @staticmethod
+    def get_noise():
+        return None

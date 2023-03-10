@@ -9,7 +9,7 @@ import torch
 from .BaseConfiguration import BaseConfiguration
 
 from .Rewards import rep_keyword, root_keyword, initial_keyword, projected_gravity_keyword, \
-    contact_forces_gravity_keyword
+    contact_forces_gravity_keyword, previous_position_keyword
 from .Rewards import termination_contact_indices_keyword, penalization_contact_indices_keyword, goal_height_keyword
 
 import time
@@ -32,7 +32,8 @@ def convert_drive_mode(mode_str):
 
 
 class RobotConfig(BaseConfiguration):
-    def __init__(self, config_file, env_config, nn, learning_algorithm, logger, rewards):
+    # def __init__(self, config_file, env_config, nn, learning_algorithm, logger, rewards, verbose=False):
+    def __init__(self, config_file, env_config, rewards, verbose=False):
         with open(config_file) as f:
             self.cfg = json.load(f)
 
@@ -50,9 +51,6 @@ class RobotConfig(BaseConfiguration):
         self.rep = 0
         self.n_step = 0
 
-        self.nn = nn
-        self.learning_algorithm = learning_algorithm
-        self.without_learning = True if self.learning_algorithm is None else False
         self.rewards = rewards
         self.config_intial_position = [self.cfg["asset_options"]["initial_postion"][axis]
                                        for axis in self.cfg["asset_options"]["initial_postion"]]
@@ -72,10 +70,6 @@ class RobotConfig(BaseConfiguration):
 
         self.limits = None
         self.finished = None
-        self.logger = logger
-
-        if not (None is self.logger):
-            self.logger.set_robot_name(self.asset_name)
 
         self.rollout_time = self.env_config.rollout_time
 
@@ -90,14 +84,15 @@ class RobotConfig(BaseConfiguration):
         self.dof_prop_assets = None
         self.rigid_shape_assets = None
         self.robot_assets = None
-        self._load_asset(verbose=True)
+        self._load_asset(verbose=verbose)
 
         self.robot_handles = []
         self.envs = []
         self.started_position = None
+        self.previous_robot_position = None
 
         self.__create_plane()
-        self.__create_robot(self.num_envs, verbose=True)
+        self.__create_robot(self.num_envs, verbose=verbose)
         self.__prepare_sim()
 
         self.viewer = None
@@ -111,11 +106,15 @@ class RobotConfig(BaseConfiguration):
 
         self.__prepare_buffers()
 
-        if self.rewards is not None and self.logger is not None and not (self.without_learning):
-            self.logger.store_reward_param(self.rewards.reward_terms)
-
-        self.pretraining_process_applied = False
         self.default_pose = True
+        self.dones = None
+        self.reward = None
+
+    def compute_env_distance(self):
+        return self.init_root_state[:, :3] - self.root_states[:, :3]
+
+    def get_asset_name(self):
+        return self.asset_name
 
     def __create_plane(self):
         plane_params = gymapi.PlaneParams()
@@ -130,8 +129,10 @@ class RobotConfig(BaseConfiguration):
         self.root_states[env_ids] = 0.
 
         self.root_states[env_ids, :3] = self.started_position[env_ids]
+        self.previous_robot_position[env_ids, :3] = self.root_states[:, :3].detach().clone()
 
         a = [0., 0., 0., 1]
+        self.init_root_state[env_ids, :3] = self.root_states[env_ids, :3]
         self.root_states[env_ids, 3:7] = torch.FloatTensor(a).to(self.device)
 
         env_ids_int32 = env_ids.to(dtype=torch.int32)
@@ -157,18 +158,59 @@ class RobotConfig(BaseConfiguration):
                                               gymtorch.unwrap_tensor(self.dof_state),
                                               gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
-    def reset_envs(self):
+    def reset_all_envs(self):
         self._reset_root()
         self._reset_dofs()
 
-    def post_step(self):
+        self.limits = None
+        self.finished.fill_(0)
+        self.rep = 0
 
+    def check_termination(self):
+        if self.limits is None:
+            self.limits = self.__check_pos_limit()
+        else:
+            self.limits += self.__check_pos_limit()
+
+        touching = self.rewards.high_penalization_contacts if hasattr(self.rewards,
+                                                                      'high_penalization_contacts') else None
+        self.finished |= torch.all(self.limits > 1., dim=0)
+
+        if not (None is touching):
+            self.finished |= torch.all(touching > 1., dim=0)
+
+        all_touching = torch.all(touching > 1, dim=0) if not (None is touching) else False
+        all_limits = torch.all(self.limits > 1., dim=0)
+
+        self.finished.fill_(0)
+        if all_touching or all_limits:
+            self.finished.fill_(1)
+            print("Touching or limits")
+
+    def _refresh_gym_tensors_(self):
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
         self.gym.refresh_dof_state_tensor(self.sim)
         self.gym.refresh_mass_matrix_tensors(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
 
+    def compute_final_reward(self):
+        simulation_info = {
+            rep_keyword: self.rep,
+            root_keyword: self.root_states,
+            previous_position_keyword: self.previous_robot_position,
+            initial_keyword: self.started_position,
+            projected_gravity_keyword: self.projected_gravity,
+            contact_forces_gravity_keyword: self.contact_forces,
+            termination_contact_indices_keyword: self.termination_contact_indices,
+            penalization_contact_indices_keyword: self.penalization_contact_indices,
+            goal_height_keyword: self.goal_height,
+        }
+
+        rewards = self.rewards.compute_final_reward(simulation_info)
+        return rewards
+
+    def post_step(self):
         self.base_quat[:] = self.root_states[:, 3:7]
         self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
         self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
@@ -179,22 +221,16 @@ class RobotConfig(BaseConfiguration):
 
         if not self.env_config.test_joints:
 
-            self.counter_episode += 1
             self.foot_positions = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices,
                                   0:3]
 
             max_length = self.rollout_time / self.env_config.dt
-            self.counter_episode %= max_length
             self.rep += 1
-
-            if self.limits is None:
-                self.limits = self.__check_pos_limit()
-            else:
-                self.limits += self.__check_pos_limit()
 
             simulation_info = {
                 rep_keyword: self.rep,
                 root_keyword: self.root_states,
+                previous_position_keyword: self.previous_robot_position,
                 initial_keyword: self.started_position,
                 projected_gravity_keyword: self.projected_gravity,
                 contact_forces_gravity_keyword: self.contact_forces,
@@ -204,66 +240,55 @@ class RobotConfig(BaseConfiguration):
             }
 
             self.rewards.compute_rewards_in_state(simulation_info)
-            touching = self.rewards.high_penalization_contacts if hasattr(self.rewards,
-                                                                          'high_penalization_contacts') else None
-            self.finished |= torch.all(self.limits > 1., dim=0)
+            self.previous_robot_position = self.root_states[:, :3].detach().clone()
+            self.check_termination()
 
-            if not (None is touching):
-                self.finished |= torch.all(touching > 1., dim=0)
-
-            all_touching = torch.all(touching > 1, dim=0) if not (None is touching) else False
-            all_limits = torch.all(self.limits > 1., dim=0)
-
-            if all_touching or all_limits:
-                self.counter_episode = 0
-                print("Touching or limits")
-
-            if self.counter_episode == 0 and not self.env_config.test_joints:
-                self.actual_time = time.time()
-                total_time = self.actual_time - self.starting_training_time
-
-                rewards = self.rewards.compute_final_reward(simulation_info)
-                distance = self.rewards.x_distance
-
-                print(f"rewards: {rewards}")
-
-                std_height = self.rewards.std_height if hasattr(self.rewards, 'std_height') else None
-
-                if not self.without_learning:
-                    noise_bef = None if None == self.learning_algorithm.get_noise() else self.learning_algorithm.get_noise().detach().clone()
-                    self.logger.store_data(self.root_states[:, 0], rewards, self.nn.get_weights(), noise_bef,
-                                           self.n_step, total_time, std_height, show_plot=True)
-
-                    best_index = torch.argmax(distance)
-
-                    if self.rollout == 0:
-                        self.learning_algorithm.print_info(rewards, self.n_step, total_time,
-                                                           self.actual_time - self.starting_rollout_time)
-                        self.nn.train_modify_weights(self.learning_algorithm, rewards)
-
-                        self.learning_algorithm.post_step()
-
-                        print(f"weights: {self.nn.get_weights()}")
-                else:
-                    self.logger.save_points_testing(distance, total_time)
-
-                self.reset_envs()
-                self.pretraining_process_applied = False
-
-                if not self.without_learning:
-                    self.logger.store_data_post(self.nn.get_weights())
-                    self.logger.save_stored_data(actual_weight=self.nn.get_weights(), actual_reward=rewards,
-                                                 iteration=self.n_step, total_time=total_time, noise=noise_bef,
-                                                 index=best_index)
-
-                self.limits = None
-                self.finished.fill_(0)
-                self.rep = 0
-                self.rewards.clean_buffers()
-
-                if self.rollout == 0:
-                    self.n_step += 1
-                    self.starting_rollout_time = time.time()
+            # if self.counter_episode == 0 and not self.env_config.test_joints:
+            #     self.actual_time = time.time()
+            #     total_time = self.actual_time - self.starting_training_time
+            #
+            #     rewards = self.rewards.compute_final_reward(simulation_info)
+            #     distance = self.rewards.x_distance
+            #
+            #     print(f"rewards: {rewards}")
+            #
+            #     std_height = self.rewards.std_height if hasattr(self.rewards, 'std_height') else None
+            #
+            #     if not self.without_learning:
+            #         noise_bef = None if None is self.learning_algorithm.get_noise() else self.learning_algorithm.get_noise().detach().clone()
+            #         self.logger.store_data(self.root_states[:, 0], rewards, self.nn.get_weights(), noise_bef,
+            #                                self.n_step, total_time, std_height, show_plot=True)
+            #
+            #         best_index = torch.argmax(distance)
+            #
+            #         if self.rollout == 0:
+            #             self.learning_algorithm.print_info(rewards, self.n_step, total_time,
+            #                                                self.actual_time - self.starting_rollout_time)
+            #             self.nn.train_modify_weights(self.learning_algorithm, rewards)
+            #
+            #             self.learning_algorithm.post_step()
+            #
+            #             print(f"weights: {self.nn.get_weights()}")
+            #     else:
+            #         self.logger.save_points_testing(distance, total_time)
+            #
+            #     self.reset_envs()
+            #     self.pretraining_process_applied = False
+            #
+            #     if not self.without_learning:
+            #         self.logger.store_data_post(self.nn.get_weights())
+            #         self.logger.save_stored_data(actual_weight=self.nn.get_weights(), actual_reward=rewards,
+            #                                      iteration=self.n_step, total_time=total_time, noise=noise_bef,
+            #                                      index=best_index)
+            #
+            #     self.limits = None
+            #     self.finished.fill_(0)
+            #     self.rep = 0
+            #     self.rewards.clean_buffers()
+            #
+            #     if self.rollout == 0:
+            #         self.n_step += 1
+            #         self.starting_rollout_time = time.time()
 
     def __prepare_distance_and_termination_rollout_buffers_(self):
         rew = self.rewards.reward_terms
@@ -408,6 +433,7 @@ class RobotConfig(BaseConfiguration):
             if self.env_config.disable_leg:
                 actions[:, :3] = 0.
 
+            self.actions = actions
             actions_scaled = actions[:, :12] * self.env_config.actions_scale
             for i in [0, 3, 6, 9]:
                 actions_scaled[:, i] *= self.env_config.hip_scale
@@ -420,28 +446,7 @@ class RobotConfig(BaseConfiguration):
 
         self.torques = torques
 
-    def __final_round(self):
-        rc = False
-        if 0 < self.env_config.max_iterations <= self.n_step:
-            rc = True
-
-        return rc
-
-    def run_con(self, nn=False):
-        self.starting_training_time = time.time()
-        self.starting_rollout_time = time.time()
-
-        while not self.gym.query_viewer_has_closed(self.viewer) and not self.__final_round():
-
-            if not self.pretraining_process_applied and not self.without_learning:
-                self.nn.pretraing_process(self.learning_algorithm)
-                self.pretraining_process_applied = True
-
-            out_cbn = self.nn.forward(None)
-
-            self.step(test_data=None, actions=out_cbn, position_control=self.env_config.position_control)
-
-    def __check_pos_limit(self) -> None:
+    def __check_pos_limit(self):
         out_of_limits = -(self.dof_pos - self.lower_limit_cuda[:]).clip(max=0.)
         out_of_limits += (self.dof_pos - self.upper_limit_cuda[:]).clip(min=0.)
 
@@ -465,22 +470,74 @@ class RobotConfig(BaseConfiguration):
 
         self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self.torques))
 
-    def step(self, test_data=None, actions=None, position_control=True):
-        if not self.gym.query_viewer_has_closed(self.viewer):
-            self.move_dofs(test_data, actions, position_control=position_control)
+    def reset_simulation(self):
+        self.reset_all_envs()
 
-            # step the physics
-            self.gym.simulate(self.sim)
-            self.gym.fetch_results(self.sim, True)
+        obs, _, _, _, _, closed_simulation = self.step(
+            None,
+            torch.zeros(self.num_envs, self.num_dof, device=self.device, requires_grad=False)
+        )
 
-            # update the viewer
+        return obs, closed_simulation
+
+    def step(self, test_data=None, actions=None, position_control=True, iterations_without_control=1):
+
+        dones = None
+        info = None
+        obs = None
+
+        closed_simulation = self.compute_graphics()
+
+        if not closed_simulation:
+            for _ in range(iterations_without_control):
+                self.move_dofs(test_data, actions, position_control=position_control)
+
+                # step the physics
+                self.gym.simulate(self.sim)
+                self.gym.fetch_results(self.sim, True)
+
+                # update the viewer
+                # self.gym.step_graphics(self.sim)
+                # self.gym.draw_viewer(self.viewer, self.sim, True)
+                #
+                # # Wait for dt to elapse in real time.
+                # # This synchronizes the physics simulation with the rendering rate.
+                # self.gym.sync_frame_time(self.sim)
+
+                self._refresh_gym_tensors_()
+            self.post_step()
+
+            obs = self.create_observations()
+            dones = self.finished
+            info = None
+
+        return obs, self.actions, self.reward, dones, info, closed_simulation
+
+    def compute_graphics(self):
+        ending = self.gym.query_viewer_has_closed(self.viewer)
+
+        if not ending:
+
+            if self.device != 'cpu':
+                self.gym.fetch_results(self.sim, True)
+
             self.gym.step_graphics(self.sim)
-            self.gym.draw_viewer(self.viewer, self.sim, False)
+            self.gym.draw_viewer(self.viewer, self.sim, True)
 
-            # Wait for dt to elapse in real time.
             # This synchronizes the physics simulation with the rendering rate.
             self.gym.sync_frame_time(self.sim)
-            self.post_step()
+
+        return ending
+
+    def create_observations(self):
+        obs = torch.cat(
+            self.projected_gravity,
+            (self.dof_pos - self.default_dof_pos),
+            self.dof_vel,
+            self.actions
+        )
+
+        return obs
 
     def __create_camera(self):
         viewer = self.gym.create_viewer(self.sim, gymapi.CameraProperties())
@@ -566,6 +623,7 @@ class RobotConfig(BaseConfiguration):
 
         num_per_row = int(math.sqrt(num_robots))
         self.started_position = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
+        self.previous_robot_position = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
 
         if verbose:
             print("Creating %d environments" % num_robots)
@@ -576,6 +634,7 @@ class RobotConfig(BaseConfiguration):
             env = self.gym.create_env(self.sim, lower, upper, num_per_row)
             pos_aux_p[1] = i * self.env_config.spacing_env
             self.started_position[i] = torch.FloatTensor(pos_aux_p).to(self.device)
+            self.previous_robot_position[i] = self.started_position[i]
             pose.p = gymapi.Vec3(*pos_aux_p)
             robot_handle = self.gym.create_actor(env, self.robot_assets, pose, self.asset_name, i,
                                                  0 if self.cfg["asset_options"]["asset_config"][

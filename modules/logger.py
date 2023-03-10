@@ -12,7 +12,7 @@ mpl.use('qt5agg')
 root_run_folder_name = "runs"
 
 
-class data_store:
+class DataStore:
     def __init__(self):
         self.record = -99999
         self.weights = None
@@ -63,13 +63,13 @@ class Logger:
         self.frequency_plot = frequency_plot
 
         self.stored_info = {
-            "max_reward": data_store(),
-            "min_reward": data_store(),
-            "mean_reward": data_store(),
+            "max_reward": DataStore(),
+            "min_reward": DataStore(),
+            "mean_reward": DataStore(),
 
-            "max_distance": data_store(),
-            "min_distance": data_store(),
-            "mean_distance": data_store(),
+            "max_distance": DataStore(),
+            "min_distance": DataStore(),
+            "mean_distance": DataStore(),
         }
         self.renew_data = {
             "max_reward": False,
@@ -84,7 +84,7 @@ class Logger:
         self.x_axis = []
         self.mean_distances = []
         self.mean_reward = []
-        self.mean_std_heigh = []
+        self.mean_std_height = []
         self.figure, self.ax = plt.subplots(size_figure)
         plt.ion()
         self.distance = []
@@ -119,13 +119,14 @@ class Logger:
         return data.weights_post if post else data.weights, data.noise, data.iteration, data.record, data.index
 
     def set_robot_name(self, robot):
-        path_to_check = os.path.join(root_run_folder_name, robot)
+        if robot is not None:
+            path_to_check = os.path.join(root_run_folder_name, robot)
 
-        if self.save_data:
-            if not path.exists(path_to_check):
-                os.mkdir(path_to_check)
+            if self.save_data:
+                if not path.exists(path_to_check):
+                    os.mkdir(path_to_check)
 
-            self.folder = os.path.join(path_to_check, self.folder_time)
+                self.folder = os.path.join(path_to_check, self.folder_time)
 
     def save_points_testing(self, distance, time):
         self.distance.append(float(torch.mean(distance)))
@@ -202,7 +203,7 @@ class Logger:
         plt.show(block=block)
         plt.pause(0.001)
 
-    def store_data(self, distance, reward, weight, noise, iteration, total_time, std_height, show_plot=False,
+    def store_data(self, distance, reward, weight, noise, iteration, total_time, std_height=None, show_plot=False,
                    pause=False):
 
         mean_reward = float(torch.mean(reward))
@@ -213,7 +214,7 @@ class Logger:
             self.x_axis.append(iteration)
             self.mean_distances.append(mean_distance)
             self.mean_reward.append(mean_reward)
-            self.mean_std_heigh.append(std_height_mean)
+            self.mean_std_height.append(std_height_mean)
 
             if show_plot:
                 self.log(False, pause)
@@ -289,7 +290,7 @@ class Logger:
                 pickle.dump(self.stored_info[k], f)
 
         if not (actual_weight is None):
-            temp = data_store()
+            temp = DataStore()
 
             temp.iteration = iteration
             temp.weights = actual_weight

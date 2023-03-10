@@ -3,18 +3,18 @@
     "use_gpu": true
   },
   "asset_options": {
-    "asset_folder": "../models/mini_cheetah/urdf",
-    "asset_filename": "mini_cheetah.urdf",
-    "asset_name": "mini_cheetah",
+    "asset_folder": "../b1/urdf",
+    "asset_filename": "b1.urdf",
+    "asset_name": "b1",
     "dof_drive_mode": "FORCE",
     "terminate_after_contacts_on": ["thigh", "hip"],
     "penalization_contacts_on": ["calf"],
     "foot_contacts_on": "foot",
-    "goal_height": 0.32,
+    "goal_height": 0.75,
     "initial_postion": {
       "y": 0.0,
       "x": 0.0,
-      "z": 0.32
+      "z": 0.75
     },
     "asset_config": {
       "fix_base_link": false,
@@ -27,24 +27,26 @@
         "FR_hip_joint": -0.1,  
         "RR_hip_joint": -0.1,  
 
-        "FL_thigh_joint": -0.8,  
-        "RL_thigh_joint": -0.8,  
-        "FR_thigh_joint": -0.8,  
-        "RR_thigh_joint": -0.8,  
+        "FL_thigh_joint": 0.68,  
+        "RL_thigh_joint": 0.68,  
+        "FR_thigh_joint": 0.68,  
+        "RR_thigh_joint": 0.68,  
 
-        "FL_calf_joint": 1.62,  
-        "RL_calf_joint": 1.62,  
-        "FR_calf_joint": 1.62,  
-        "RR_calf_joint": 1.62  
+        "FL_calf_joint": -1.254,  
+        "RL_calf_joint": -1.254,  
+        "FR_calf_joint": -1.254,  
+        "RR_calf_joint": -1.254  
     },
     "gains_constants": {
       "Kp": {
-        "_joint": 22.0,
-        "thigh_joint": 22.0
+        "hip_joint": 110.0,
+        "thigh_joint": 1150.0,
+        "calf_joint": 125.0
       },
        "Kd": {
-        "_joint": 0.5,
-        "thigh_joint": 0.5
+        "hip_joint": 1.5,
+        "thigh_joint": 1.5,
+        "calf_joint": 0.7
       }
     }
   }

@@ -98,8 +98,11 @@ class CPGRBFN(torchNet):
         noise = pibb.get_noise()
         self.mn.apply_noise_tensor(noise)
 
+    def modify_weights(self, weights):
+        self.mn.W = weights
+
     def train_modify_weights(self, pibb, rewards):
-        self.mn.W = pibb.step(rewards, self.get_weights())
+        self.modify_weights(pibb.step(rewards, self.get_weights()))
 
     def get_n_outputs(self):
         return self.__n_out

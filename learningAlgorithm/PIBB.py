@@ -13,6 +13,7 @@ class PIBB(object):
         self.h = _h
         self.decay_h = _decay_h
         self.variance = variance
+        self.policy = None  # Set once the training starts
 
         self.decay = decay
         self.variance_ex = variance
@@ -54,7 +55,7 @@ class PIBB(object):
 
         return hyp
 
-    def print_info(self, rw, rep, total_time, rollout_time):
+    def print_info(self, rw, rep, total_time, rollout_time, loss):
         max_fitness = float(torch.max(rw))
         min_fitness = float(torch.min(rw))
         mean_fitness = float(torch.mean(rw))
@@ -103,6 +104,12 @@ class PIBB(object):
 
         return torch.reshape(parameter_arr, _parameter_arr.shape)
 
+    def update(self, policy, rewards):
+        policy.modify_weights(self.step(rewards, policy.get_weights()))
+        self.post_step()
+        policy.mn.apply_noise_tensor(self.get_noise())
+        self.policy = policy
+
     def post_step(self):
         # Decay h (1/λ) / variance as learning progress
         self.h = self.decay_h * (1 / self.h)
@@ -110,3 +117,18 @@ class PIBB(object):
 
         self.variance *= self.decay
         self.genere_noise_arr()
+
+    def prepare_training(self, agents, steps_per_iteration, num_observation, num_actions, policy):
+        policy.mn.apply_noise_tensor(self.get_noise())
+        self.policy = policy
+
+    @staticmethod
+    def post_step_simulation(obs, actions, reward, dones, info, closed_simulation):
+        pass
+
+    def last_step(self, obs, actions, reward, dones, info, closed_simulation):
+        pass
+
+    def act(self, obs):
+        return self.policy.forward(obs)
+

@@ -59,7 +59,7 @@ class Memory:
     def clear(self):
         self.step = 0
 
-    # TODO: Review
+    # “reward-to-go policy gradient” Compute first the last returns, it's easier and from that compute A.
     def compute_returns(self, last_values, gamma, lam):
         advantage = 0
         for step in reversed(range(self.num_step_per_env)):

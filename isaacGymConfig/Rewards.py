@@ -2,6 +2,9 @@ import torch
 
 rep_keyword = 'rep'
 root_keyword = 'root_state'
+base_lin_vel_keyboard = 'base_lin_vel'
+base_ang_vel_keyboard = 'base_ang_vel'
+previous_position_keyword = 'previous_position'
 initial_keyword = 'initial_state'
 projected_gravity_keyword = 'projected_gravity'
 contact_forces_gravity_keyword = 'contact_forces'
@@ -30,6 +33,10 @@ class IndividualReward:
     def _prepare_buffer_y_distance_term_(self):
         pass
 
+    def _prepare_buffer_speed_error_term_(self):
+        self.accumulative_error_speed = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                    requires_grad=False)
+
     def _prepare_buffer_stability_term_(self):
         self.accumulative_height = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
                                                requires_grad=False)
@@ -51,16 +58,47 @@ class IndividualReward:
 
     ###############################################################################################
     """
-    Compue the needed calculations in every step
+    Compute the needed calculations in every step
     """
 
-    def _compute_in_state_x_distance_term_(self, simulation_info):
-        pass
+    def _compute_in_state_x_distance_term_(self, simulation_info, reward_data):
+        previous_position = simulation_info[previous_position_keyword][:, 0]
+        actual_position = simulation_info[root_keyword][:, 0]
 
-    def _compute_in_state_y_distance_term_(self, simulation_info):
-        pass
+        self.x_distance_step = actual_position - previous_position
+        return self.x_distance_step
 
-    def _compute_in_state_stability_term_(self, simulation_info):
+    def _compute_in_state_y_distance_term_(self, simulation_info, reward_data):
+        previous_position = simulation_info[previous_position_keyword][:, 1]
+        actual_position = simulation_info[root_keyword][:, 1]
+
+        self.y_distance_step = actual_position - previous_position
+        return self.y_distance_step
+
+    def _compute_in_state_speed_error_term_(self, simulation_info, reward_data):
+        def error_in_speed_int(actual, desired, compute, division_):
+            if compute:
+                error = actual - desired
+                return torch.exp(-torch.torch.square(error)/division_)
+            else:
+                return 0
+
+        base_vel = simulation_info[base_lin_vel_keyboard]
+        speed_in_x_rw = reward_data['speed_in_x']
+        speed_in_y_rw = reward_data['speed_in_y']
+        speed_in_z_rw = reward_data['speed_in_z']
+        division = reward_data['division']
+
+        error_z = error_in_speed_int(speed_in_z_rw, base_vel[:, 2], not(None is speed_in_z_rw), division)
+        error_x = error_in_speed_int(speed_in_x_rw, base_vel[:, 0], not(None is speed_in_x_rw), division)
+        error_y = error_in_speed_int(speed_in_y_rw, base_vel[:, 1], not(None is speed_in_y_rw), division)
+
+        in_state = error_z + error_x + error_y
+        self.accumulative_error_speed += in_state
+
+        return in_state
+
+    def _compute_in_state_stability_term_(self, simulation_info, reward_data):
         projected_gravity = simulation_info[projected_gravity_keyword]
         root_state = simulation_info[root_keyword]
 
@@ -70,21 +108,23 @@ class IndividualReward:
         self.accumulative_height += root_state[:, 2]
         self.accumulative_height_2 += torch.square(root_state[:, 2])
 
-    def _compute_in_state_low_penalization_contacts_term_(self, simulation_info):
+    def _compute_in_state_low_penalization_contacts_term_(self, simulation_info, reward_data):
         contact_forces = simulation_info[contact_forces_gravity_keyword]
         penalization_contact_indices = simulation_info[penalization_contact_indices_keyword]
 
-        self.low_penalization_contacts += torch.any(
-            torch.norm(contact_forces[:, penalization_contact_indices, :], dim=-1) > 1., dim=1)
+        in_state = torch.any(torch.norm(contact_forces[:, penalization_contact_indices, :], dim=-1) > 1., dim=1)
+        self.low_penalization_contacts += in_state
 
-    def _compute_in_state_high_penalization_contacts_term_(self, simulation_info):
+        return in_state
+
+    def _compute_in_state_high_penalization_contacts_term_(self, simulation_info, reward_data):
         contact_forces = simulation_info[contact_forces_gravity_keyword]
         termination_contact_indices = simulation_info[termination_contact_indices_keyword]
 
         self.high_penalization_contacts += torch.any(
             torch.norm(contact_forces[:, termination_contact_indices, :], dim=-1) > 1., dim=1)
 
-    def _compute_in_state_height_error_term_(self, simulation_info):
+    def _compute_in_state_height_error_term_(self, simulation_info, reward_data):
         z_state = simulation_info[root_keyword][:, 2]
         goal_height = simulation_info[goal_height_keyword]
 
@@ -136,6 +176,9 @@ class IndividualReward:
 
         return stability
 
+    def _compute_final_speed_error_term_(self, simulation_info, reward_data):
+        return self.accumulative_error_speed
+
     def _compute_final_low_penalization_contacts_term_(self, simulation_info, reward_data):
         weights = reward_data["weights"]
         max_clip = reward_data["max_clip"]
@@ -174,9 +217,14 @@ class IndividualReward:
 
     def _clean_buffer_x_distance_(self):
         self.x_distance = None
+        self.x_distance_step = None
 
     def _clean_buffer_y_distance_(self):
         self.y_distance = None
+        self.y_distance_step = None
+
+    def _clean_buffer_speed_error_(self):
+        self.accumulative_error_speed.fill_(0)
 
     def _clean_buffer_stability_(self):
         self.accumulative_height.fill_(0)
@@ -195,10 +243,14 @@ class IndividualReward:
 
 ###############################################################################################
 
-
+# TODO: test with jit script, reduces the computational time
+# @torch.jit.script
 class Rewards(IndividualReward):
-    def __init__(self, num_envs, device, rewards):
+    def __init__(self, num_envs, device, rewards, gamma):
         super().__init__(num_envs, device)
+        self.reward_terms = None
+        self.gamma = gamma
+        self.actual_gama = gamma
         self.change_rewards(rewards)
 
     def change_rewards(self, rewards):
@@ -211,6 +263,8 @@ class Rewards(IndividualReward):
     def compute_rewards_in_state(self, simulation_info):
         for reward_name in self.reward_terms.keys():
             getattr(self, '_compute_in_state_' + reward_name + '_term_')(simulation_info)
+
+        self.actual_gama *= self.actual_gama
 
     def compute_final_reward(self, simulation_info):
         reward = 0
@@ -229,6 +283,8 @@ class Rewards(IndividualReward):
         return reward
 
     def clean_buffers(self):
+        self.actual_gama = self.gamma
+
         for reward_name in self.reward_terms.keys():
             getattr(self, '_clean_buffer_' + reward_name + '_')()
 

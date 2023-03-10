@@ -16,7 +16,6 @@ class EnvConfig:
         self.rollout_time = 3
         self.num_env = 1
         self.spacing_env = -3.5
-        self.max_iterations = 151
         self.dt = 0.005
         self.disable_leg = False
         
