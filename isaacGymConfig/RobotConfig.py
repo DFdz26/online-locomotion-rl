@@ -111,7 +111,7 @@ class RobotConfig(BaseConfiguration):
         self.reward = None
 
     def compute_env_distance(self):
-        return self.init_root_state[:, :3] - self.root_states[:, :3]
+        return self.root_states[:, :3] - self.init_root_state[:, :3]
 
     def get_asset_name(self):
         return self.asset_name
@@ -179,6 +179,7 @@ class RobotConfig(BaseConfiguration):
         if not (None is touching):
             self.finished |= torch.all(touching > 1., dim=0)
 
+
         all_touching = torch.all(touching > 1, dim=0) if not (None is touching) else False
         all_limits = torch.all(self.limits > 1., dim=0)
 
@@ -239,56 +240,9 @@ class RobotConfig(BaseConfiguration):
                 goal_height_keyword: self.goal_height,
             }
 
-            self.rewards.compute_rewards_in_state(simulation_info)
+            self.reward = self.rewards.compute_rewards_in_state(simulation_info)
             self.previous_robot_position = self.root_states[:, :3].detach().clone()
             self.check_termination()
-
-            # if self.counter_episode == 0 and not self.env_config.test_joints:
-            #     self.actual_time = time.time()
-            #     total_time = self.actual_time - self.starting_training_time
-            #
-            #     rewards = self.rewards.compute_final_reward(simulation_info)
-            #     distance = self.rewards.x_distance
-            #
-            #     print(f"rewards: {rewards}")
-            #
-            #     std_height = self.rewards.std_height if hasattr(self.rewards, 'std_height') else None
-            #
-            #     if not self.without_learning:
-            #         noise_bef = None if None is self.learning_algorithm.get_noise() else self.learning_algorithm.get_noise().detach().clone()
-            #         self.logger.store_data(self.root_states[:, 0], rewards, self.nn.get_weights(), noise_bef,
-            #                                self.n_step, total_time, std_height, show_plot=True)
-            #
-            #         best_index = torch.argmax(distance)
-            #
-            #         if self.rollout == 0:
-            #             self.learning_algorithm.print_info(rewards, self.n_step, total_time,
-            #                                                self.actual_time - self.starting_rollout_time)
-            #             self.nn.train_modify_weights(self.learning_algorithm, rewards)
-            #
-            #             self.learning_algorithm.post_step()
-            #
-            #             print(f"weights: {self.nn.get_weights()}")
-            #     else:
-            #         self.logger.save_points_testing(distance, total_time)
-            #
-            #     self.reset_envs()
-            #     self.pretraining_process_applied = False
-            #
-            #     if not self.without_learning:
-            #         self.logger.store_data_post(self.nn.get_weights())
-            #         self.logger.save_stored_data(actual_weight=self.nn.get_weights(), actual_reward=rewards,
-            #                                      iteration=self.n_step, total_time=total_time, noise=noise_bef,
-            #                                      index=best_index)
-            #
-            #     self.limits = None
-            #     self.finished.fill_(0)
-            #     self.rep = 0
-            #     self.rewards.clean_buffers()
-            #
-            #     if self.rollout == 0:
-            #         self.n_step += 1
-            #         self.starting_rollout_time = time.time()
 
     def __prepare_distance_and_termination_rollout_buffers_(self):
         rew = self.rewards.reward_terms
@@ -530,11 +484,12 @@ class RobotConfig(BaseConfiguration):
         return ending
 
     def create_observations(self):
-        obs = torch.cat(
+        obs = torch.cat((
             self.projected_gravity,
             (self.dof_pos - self.default_dof_pos),
             self.dof_vel,
-            self.actions
+            self.actions),
+            dim=-1
         )
 
         return obs

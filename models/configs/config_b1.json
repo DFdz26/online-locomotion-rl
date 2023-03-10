@@ -3,7 +3,7 @@
     "use_gpu": true
   },
   "asset_options": {
-    "asset_folder": "../b1/urdf",
+    "asset_folder": "../models/b1/urdf",
     "asset_filename": "b1.urdf",
     "asset_name": "b1",
     "dof_drive_mode": "FORCE",

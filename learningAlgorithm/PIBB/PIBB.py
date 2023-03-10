@@ -126,7 +126,7 @@ class PIBB(object):
     def post_step_simulation(obs, actions, reward, dones, info, closed_simulation):
         pass
 
-    def last_step(self, obs, actions, reward, dones, info, closed_simulation):
+    def last_step(self, obs):
         pass
 
     def act(self, obs):

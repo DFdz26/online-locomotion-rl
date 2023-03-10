@@ -46,8 +46,9 @@ class Memory:
     def add_steps_into_memory(self, step: Step):
         if self.step >= self.num_step_per_env:
             raise AssertionError("Rollout buffer overflow")
+
         self.observations[self.step].copy_(step.observations)
-        self.dones[self.step].copy_(step.dones)
+        self.dones[self.step].copy_(step.dones.view(-1, 1))
         self.actions[self.step].copy_(step.actions)
         self.rewards[self.step].copy_(step.rewards.view(-1, 1))
         self.values[self.step].copy_(step.values)

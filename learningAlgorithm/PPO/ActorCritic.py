@@ -36,8 +36,8 @@ class ActorCritic(nn.Module):
         self.__critic_building__(criticArgs)
 
         if self.debug_mess:
-            print(f"Actor MLP: {self.actor_body}")
-            print(f"Critic MLP: {self.critic_body}")
+            print(f"Actor MLP: {self.actor_NN}")
+            print(f"Critic MLP: {self.critic_NN}")
 
         # Action noise
         self.std = nn.Parameter(actor_std_noise * torch.ones(actorArgs.outputs[0]))
@@ -45,6 +45,9 @@ class ActorCritic(nn.Module):
 
         # For optimizing the process
         Normal.set_default_validate_args = False
+
+    def get_weights(self):
+        return [self.actor_NN, self.critic_NN] 
 
     def forward(self):
         pass
@@ -97,9 +100,12 @@ class ActorCritic(nn.Module):
         layers = self.__generic_MLP_building__(actorArgs)
 
         if self.debug_mess:
-            print("Creating the Critic")
+            print("Creating the Actor ...", end='  ')
 
         self.actor_NN = nn.Sequential(*layers)
+
+        if self.debug_mess:
+            print("Done")
 
     def __critic_building__(self, criticArgs):
         if self.debug_mess:
@@ -108,9 +114,12 @@ class ActorCritic(nn.Module):
         layers = self.__generic_MLP_building__(criticArgs)
 
         if self.debug_mess:
-            print("Creating the Critic")
+            print("Creating the Critic ...", end='  ')
 
         self.critic_NN = nn.Sequential(*layers)
+
+        if self.debug_mess:
+            print("Done")
 
     @staticmethod
     def __generic_MLP_building__(args):
@@ -120,12 +129,12 @@ class ActorCritic(nn.Module):
         size_input = args.inputs[0]
 
         for h in range(len(args.hidden_dim)):
-            layers.append(nn.Linear(size_input, args.critic_hidden_dims[h]))
+            layers.append(nn.Linear(size_input, args.hidden_dim[h]))
 
             if not(activation is None):
                 layers.append(activation)
 
-            size_input = args.critic_hidden_dims[h]
+            size_input = args.hidden_dim[h]
 
         layers.append(nn.Linear(size_input, args.outputs[0]))
 

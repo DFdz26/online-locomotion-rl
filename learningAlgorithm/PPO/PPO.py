@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from . import ActorCritic
+from .ActorCritic import ActorCritic
 from .Memory import Memory
 
 
@@ -31,15 +31,23 @@ class PPOArgs:
 
 class PPO:
     actor_critic: ActorCritic
-    step_simulation: Memory.Step
 
-    def __init__(self, actor_critic, device='cpu'):
+    def __init__(self, actor_critic, device='cpu', verbose=False):
 
         self.device = device
+        self.verbose = verbose
 
         # PPO components
         self.actor_critic = actor_critic
+
+        if self.verbose:
+            print(f"Copying actorCritic to {device} ...", end='  ')
+
         self.actor_critic.to(device)
+
+        if self.verbose:
+            print(f"Done.")
+
         self.memory = None  # initialized later
         self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=PPOArgs.learning_rate)
         self.step_simulation = Memory.Step()
@@ -47,11 +55,11 @@ class PPO:
         self.learning_rate = PPOArgs.learning_rate
 
     def prepare_training(self, env_class, steps_per_iteration, num_observations, num_actions, policy):
-        self.init_memory(env_class.num_env, steps_per_iteration, num_observations, num_actions)
+        self.init_memory(env_class.num_envs, steps_per_iteration, num_observations, num_actions)
         self.train_mode()
 
     def init_memory(self, num_envs, num_step_simulations_per_env, actor_obs_shape, action_shape):
-        self.memory = Memory(num_envs, num_step_simulations_per_env, actor_obs_shape, action_shape, self.device)
+        self.memory = Memory(num_envs, num_step_simulations_per_env, action_shape, actor_obs_shape, self.device)
 
     def test_mode(self):
         self.actor_critic.test()
@@ -59,7 +67,7 @@ class PPO:
     def train_mode(self):
         self.actor_critic.train()
 
-    def act(self, observation):
+    def act(self, observation, actions_mult=1.):
         self.step_simulation.actions = self.actor_critic.act(observation).detach()
         self.step_simulation.values = self.actor_critic.evaluate(observation).detach()
         self.step_simulation.actions_log_prob = self.actor_critic.get_actions_log_prob(
@@ -69,6 +77,10 @@ class PPO:
 
         self.step_simulation.observations = observation
         self.step_simulation.critic_observations = observation
+
+        if actions_mult != 1.0:
+            self.step_simulation.actions *= actions_mult
+
         return self.step_simulation.actions
 
     def post_step_simulation(self, obs, actions, reward, dones, info, closed_simulation):
@@ -87,7 +99,7 @@ class PPO:
                 self.step_simulation.values * infos['time_outs'].unsqueeze(1).to(self.device), 1)
 
         # Record the step_simulation
-        self.memory.add_step_simulations(self.step_simulation)
+        self.memory.add_steps_into_memory(self.step_simulation)
         self.step_simulation.clear()
         self.actor_critic.reset()
 

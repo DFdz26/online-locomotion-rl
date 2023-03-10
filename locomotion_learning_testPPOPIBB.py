@@ -13,6 +13,14 @@ from modules.cpgrbfn2 import CPGRBFN
 from modules.logger import Logger
 
 from isaacGymConfig.Rewards import Rewards
+from learningAlgorithm.PPO.ActorCritic import ActorCritic 
+from learningAlgorithm.PPO.ActorCritic import NNCreatorArgs
+from learningAlgorithm.PPO.PPO import PPO
+
+from learningAlgorithm.PIBB.PIBB import PIBB
+
+from learningAlgorithm.CPG_MLP import MLP_CPG
+from learningAlgorithm.CPG_MLP import PPO_PIBB
 
 
 def config_env():
@@ -87,7 +95,7 @@ h = 10
 rollouts = 15
 noise_boost = 1.5
 dt = 0.005
-seconds_iteration = 6
+seconds_iteration = 3
 max_iterations = 151
 step_env = int(seconds_iteration/dt)
 step_env = int(seconds_iteration/0.01)
@@ -131,10 +139,26 @@ config = {
     "CPG": cpg_param,
     "UTILS": cpg_utils
 }
+
 cpg_rbf_nn = CPGRBFN(config, dimensions=rollouts, load_cache=LOAD_CACHE)
 
 n_out = cpg_rbf_nn.get_n_outputs()
 print(f"n_out: {n_out}")
+
+actorArgs = NNCreatorArgs()
+actorArgs.inputs = [39]
+actorArgs.hidden_dim = [128, 64]
+actorArgs.outputs = [n_out]
+
+criticArgs = NNCreatorArgs()
+criticArgs.inputs = [39]
+criticArgs.hidden_dim = [128, 64]
+criticArgs.outputs = [1]
+
+actor_std_noise = 1.
+
+actorCritic = ActorCritic(actorArgs, criticArgs, actor_std_noise, debug_mess=True)
+ppo = PPO(actorCritic, device="cuda:0", verbose=True)
 
 reward_obj = Rewards(rollouts, "cuda:0", reward_list, 1, step_env)
 pibb = PIBB(rollouts, h, 1, n_kernels*n_out, decay, variance, device="cuda:0", boost_noise=noise_boost)
@@ -144,8 +168,11 @@ env_config = EnvConfig()
 config_env()
 logged = False
 
-robot = Runner(cpg_rbf_nn, pibb, logger, config_file, env_config, reward_obj, n_out,
-               verbose=True, store_observations=False)
+learning_algorithm = PPO_PIBB(ppo, pibb)
+policy = MLP_CPG(actorCritic, cpg_rbf_nn)
+
+robot = Runner(policy, learning_algorithm, logger, config_file, env_config, reward_obj, n_out,
+               verbose=True, store_observations=True)
 
 try:
     robot.learn(max_iterations, step_env)

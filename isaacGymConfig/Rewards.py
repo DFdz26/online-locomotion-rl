@@ -74,14 +74,16 @@ class IndividualReward:
 
         self.y_distance_step = actual_position - previous_position
         return self.y_distance_step
-
-    def _compute_in_state_speed_error_term_(self, simulation_info, reward_data):
-        def error_in_speed_int(actual, desired, compute, division_):
+    
+    @staticmethod
+    def __error_in_speed_int(actual, desired, compute, division_):
             if compute:
                 error = actual - desired
                 return torch.exp(-torch.torch.square(error)/division_)
             else:
                 return 0
+
+    def _compute_in_state_speed_error_term_(self, simulation_info, reward_data):
 
         base_vel = simulation_info[base_lin_vel_keyboard]
         speed_in_x_rw = reward_data['speed_in_x']
@@ -89,9 +91,9 @@ class IndividualReward:
         speed_in_z_rw = reward_data['speed_in_z']
         division = reward_data['division']
 
-        error_z = error_in_speed_int(speed_in_z_rw, base_vel[:, 2], not(None is speed_in_z_rw), division)
-        error_x = error_in_speed_int(speed_in_x_rw, base_vel[:, 0], not(None is speed_in_x_rw), division)
-        error_y = error_in_speed_int(speed_in_y_rw, base_vel[:, 1], not(None is speed_in_y_rw), division)
+        error_z = self.__error_in_speed_int(speed_in_z_rw, base_vel[:, 2], not(None is speed_in_z_rw), division)
+        error_x = self.__error_in_speed_int(speed_in_x_rw, base_vel[:, 0], not(None is speed_in_x_rw), division)
+        error_y = self.__error_in_speed_int(speed_in_y_rw, base_vel[:, 1], not(None is speed_in_y_rw), division)
 
         in_state = error_z + error_x + error_y
         self.accumulative_error_speed += in_state
@@ -102,11 +104,15 @@ class IndividualReward:
         projected_gravity = simulation_info[projected_gravity_keyword]
         root_state = simulation_info[root_keyword]
 
+        error = 0
         for i in range(3):
             self.acc[i] += projected_gravity[:, i].detach()
+            error += self.__error_in_speed_int(projected_gravity[:, i], 0, True, 0.5)
 
         self.accumulative_height += root_state[:, 2]
         self.accumulative_height_2 += torch.square(root_state[:, 2])
+
+        return -error
 
     def _compute_in_state_low_penalization_contacts_term_(self, simulation_info, reward_data):
         contact_forces = simulation_info[contact_forces_gravity_keyword]
@@ -121,14 +127,19 @@ class IndividualReward:
         contact_forces = simulation_info[contact_forces_gravity_keyword]
         termination_contact_indices = simulation_info[termination_contact_indices_keyword]
 
-        self.high_penalization_contacts += torch.any(
-            torch.norm(contact_forces[:, termination_contact_indices, :], dim=-1) > 1., dim=1)
+        in_state= torch.any(torch.norm(contact_forces[:, termination_contact_indices, :], dim=-1) > 1., dim=1)
+        self.high_penalization_contacts += in_state
+
+        return in_state
 
     def _compute_in_state_height_error_term_(self, simulation_info, reward_data):
         z_state = simulation_info[root_keyword][:, 2]
         goal_height = simulation_info[goal_height_keyword]
 
-        self.accumulative_height_error += torch.sqrt(torch.abs(z_state - goal_height)) / 100
+        in_state = torch.sqrt(torch.abs(z_state - goal_height)) / 100
+        self.accumulative_height_error += in_state
+
+        return in_state
 
     ###############################################################################################
 
@@ -243,14 +254,14 @@ class IndividualReward:
 
 ###############################################################################################
 
-# TODO: test with jit script, reduces the computational time
-# @torch.jit.script
+
 class Rewards(IndividualReward):
-    def __init__(self, num_envs, device, rewards, gamma):
+    def __init__(self, num_envs, device, rewards, gamma, steps):
         super().__init__(num_envs, device)
         self.reward_terms = None
         self.gamma = gamma
         self.actual_gama = gamma
+        self.steps = steps
         self.change_rewards(rewards)
 
     def change_rewards(self, rewards):
@@ -261,10 +272,22 @@ class Rewards(IndividualReward):
             getattr(self, '_prepare_buffer_' + reward_name + '_term_')()
 
     def compute_rewards_in_state(self, simulation_info):
+        rw = 0
+
         for reward_name in self.reward_terms.keys():
-            getattr(self, '_compute_in_state_' + reward_name + '_term_')(simulation_info)
+            reward_data = None if not ("reward_data" in self.reward_terms[reward_name]) else \
+                self.reward_terms[reward_name]['reward_data']
+            weight = self.reward_terms[reward_name]['weight']
+
+            ind_rw = getattr(self, '_compute_in_state_' + reward_name + '_term_')(simulation_info, reward_data)
+
+            if weight == 0.0:
+                continue
+
+            rw += ind_rw * weight/self.steps
 
         self.actual_gama *= self.actual_gama
+        return rw
 
     def compute_final_reward(self, simulation_info):
         reward = 0

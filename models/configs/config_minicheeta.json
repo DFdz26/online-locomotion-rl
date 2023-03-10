@@ -3,7 +3,7 @@
     "use_gpu": true
   },
   "asset_options": {
-    "asset_folder": "../mini_cheetah/urdf",
+    "asset_folder": "../models/mini_cheetah/urdf",
     "asset_filename": "mini_cheetah.urdf",
     "asset_name": "mini_cheetah",
     "dof_drive_mode": "FORCE",

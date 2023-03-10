@@ -21,7 +21,7 @@ class Runner:
         self.learning_algorithm = learning_algorithm
         self.rewards = reward
         self.num_actions = num_actions
-        self.num_observations = 0
+        self.num_observations = 1
         self.best_distance = True
 
         self.n_steps = 0
@@ -35,7 +35,8 @@ class Runner:
         self.obs, self.closed_simulation = self.agents.reset_simulation()
 
         if store_observations:
-
+            obs = self.obs
+            self.num_observations = int(obs.size()[1])
 
     def _learning_process_(self, iteration, rewards):
         now_time = time.time()
@@ -65,17 +66,18 @@ class Runner:
 
         closed_simulation = False
         self.starting_training_time = time.time()
-        self.learning_algorithm.prepare_training(self.agents, steps_per_iteration, [self.num_observations],
-                                                 [self.num_actions], self.policy)
+        self.learning_algorithm.prepare_training(self.agents, steps_per_iteration, self.num_observations,
+                                                 self.num_actions, self.policy)
 
         for i in range(iterations):
             self.starting_iteration_time = time.time()
 
             for step in range(steps_per_iteration):
+                
                 actions = self.learning_algorithm.act(self.obs)
 
                 self.obs, actions, reward, dones, info, closed_simulation = self.agents.step(None, actions)
-                self.learning_algorithm.post_step_simulation(self.obs, actions, reward, dones, info, closed_simulation)
+                self.learning_algorithm.post_step_simulation(self.obs, actions, reward * 0.5, dones, info, closed_simulation)
 
                 if closed_simulation or torch.all(dones > 0):
                     break
@@ -83,7 +85,7 @@ class Runner:
             if closed_simulation:
                 break
 
-            rewards = self.agents.compute_final_reward()
+            rewards = self.agents.compute_final_reward() * 0.5
             self.learning_algorithm.last_step(self.obs)
 
             self._learning_process_(i, rewards)
