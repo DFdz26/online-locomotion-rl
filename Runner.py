@@ -10,6 +10,7 @@ from isaacGymConfig.RobotConfig import RobotConfig
 from modules.logger import Logger
 
 from isaacGymConfig.Rewards import Rewards
+from isaacGymConfig.Curriculum import Curriculum
 
 
 class Runner:
@@ -95,13 +96,32 @@ class Runner:
             if (i + 1) != iterations:
                 # In case of having curriculum, update it
                 if not(self.curricula is None):
-                    self.curricula.set_control_parameters(i, final_reward)
+                    self.curricula.set_control_parameters(i, final_reward, None, self.rewards, self.learning_algorithm)
 
                 # Reset the environments, the reward buffers and get the first observation
                 self.rewards.clean_buffers()
                 self.agents.reset_all_envs()
                 self.obs = self.agents.create_observations()
-                
 
-    def test_agent(self):
-        pass
+    def test_agent(self, iterations, steps_per_iteration):
+        closed_simulation = False
+        self.starting_training_time = time.time()
+
+        for i in range(iterations):
+            self.starting_iteration_time = time.time()
+
+            for step in range(steps_per_iteration):
+
+                actions = self.learning_algorithm.act(self.obs)
+
+                _, _, _, dones, _, closed_simulation = self.agents.step(None, actions)
+
+                if closed_simulation or torch.all(dones > 0):
+                    break
+
+            if closed_simulation:
+                break
+
+            if (i + 1) != iterations:
+                # Reset the environments
+                self.agents.reset_all_envs()

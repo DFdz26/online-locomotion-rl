@@ -22,7 +22,7 @@ from learningAlgorithm.PIBB.PIBB import PIBB
 from learningAlgorithm.CPG_MLP import MLP_CPG
 from learningAlgorithm.CPG_MLP import PPO_PIBB
 from isaacGymConfig.TerrainConfig import Terrain, TerrainComCfg
-from isaacGymConfig.Curriculum import Curriculum, TerrainCurrCfg
+from isaacGymConfig.Curriculum import Curriculum, TerrainCurrCfg, AlgorithmCurrCfg
 
 
 config_file = "models/configs/config_minicheeta.json"
@@ -36,6 +36,15 @@ LOAD_CACHE = True
 TERRAIN_CURRICULUM = True
 rollouts = 50
 num_env_colums = 10
+start_PPO_acting_iteration = 350
+
+
+def config_learning_curriculum():
+    algCfg = AlgorithmCurrCfg()
+    algCfg.PIBBCfg.threshold = start_PPO_acting_iteration
+
+    return algCfg
+
 
 def config_terrain(env_config):
 
@@ -86,6 +95,7 @@ def config_terrain(env_config):
         curriculum_terr = None
 
     return terrain_obj, curriculum_terr
+
 
 def config_env():
     env_config.num_env = rollouts
@@ -288,10 +298,11 @@ env_config = EnvConfig()
 
 config_env()
 terrain_obj, terrain_curr = config_terrain(env_config)
-curricula = Curriculum(rollouts, device="cuda:0", terrain_config=terrain_curr)
+alg_curr = config_learning_curriculum()
+curricula = Curriculum(rollouts, device="cuda:0", terrain_config=terrain_curr, algorithm_config=alg_curr)
 logged = False
 
-learning_algorithm = PPO_PIBB(ppo, pibb, reward_obj)
+learning_algorithm = PPO_PIBB(ppo, pibb, curricula)
 policy = MLP_CPG(actorCritic, cpg_rbf_nn)
 
 robot = Runner(policy, learning_algorithm, logger, config_file, env_config, reward_obj, n_out,

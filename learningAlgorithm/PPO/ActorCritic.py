@@ -24,7 +24,7 @@ class NNCreatorArgs:
 
 class ActorCritic(nn.Module):
 
-    def __init__(self, actorArgs, criticArgs, actor_std_noise, **kwargs):
+    def __init__(self, actorArgs, criticArgs, actor_std_noise, expertArgs, **kwargs):
 
         super().__init__()
         self.__default_values_kwargs__()
@@ -34,6 +34,7 @@ class ActorCritic(nn.Module):
 
         self.__actor_building__(actorArgs)
         self.__critic_building__(criticArgs)
+        self.__expert_building__(expertArgs)
 
         if self.debug_mess:
             print(f"Actor MLP: {self.actor_NN}")
@@ -47,10 +48,10 @@ class ActorCritic(nn.Module):
         Normal.set_default_validate_args = False
 
     def get_weights(self):
-        return [self.actor_NN, self.critic_NN] 
+        return [self.actor_NN, self.critic_NN, self.expert_NN]
     
     def load_weights(self, actor_critic):
-        self.actor_NN, self.critic_NN = actor_critic
+        self.actor_NN, self.critic_NN, self.expert_NN = actor_critic
 
     def forward(self):
         pass
@@ -75,7 +76,9 @@ class ActorCritic(nn.Module):
         self.distribution = Normal(selected_action, self.std)
 
     def act(self, observations):
-        self.update_distribution(observations)
+        sensor_observations = observations["sensor"]
+        expert_observations = observations["expert"]
+        self.update_distribution(sensor_observations)
         return self.distribution.sample()
 
     def get_actions_log_prob(self, actions):
@@ -95,6 +98,20 @@ class ActorCritic(nn.Module):
 
         if "debug_mess" in accepted:
             self.debug_mess = accepted["debug_mess"]
+
+    def __expert_building__(self, expertArgs):
+        if self.debug_mess:
+            print("Starting to build the Expert")
+
+        layers = self.__generic_MLP_building__(expertArgs)
+
+        if self.debug_mess:
+            print("Creating the Expert ...", end='  ')
+
+        self.expert_NN = nn.Sequential(*layers)
+
+        if self.debug_mess:
+            print("Done")
 
     def __actor_building__(self, actorArgs):
         if self.debug_mess:

@@ -516,7 +516,7 @@ class RobotConfig(BaseConfiguration):
             dim=-1
         )
 
-        return obs
+        return {"sensor": obs, "expert": None}
 
     def __create_camera(self):
         viewer = self.gym.create_viewer(self.sim, gymapi.CameraProperties())

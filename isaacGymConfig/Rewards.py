@@ -582,7 +582,7 @@ class Rewards(IndividualReward):
             return reward
 
     def clean_buffers(self):
-        self.actual_gama = 1.
+        self.current_gama = 1.
         self.previous_time = 0
         self.current_reward.fill_(0)
 
@@ -623,7 +623,7 @@ if __name__ == "__main__":
         initial_keyword: initial_root_sate
     }
 
-    rewards_obj = Rewards(num_envs, device, reward_list)
+    rewards_obj = Rewards(num_envs, device, reward_list, 0.99, 100)
 
     rewards_obj.prepare_buffers()
     rewards_obj.compute_rewards_in_state(simulation_info)
