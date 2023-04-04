@@ -45,9 +45,11 @@ class BaseConfiguration:
         sim_params.up_axis = gymapi.UP_AXIS_Z
         # sim_params.up_axis = 1
         sim_params.gravity = gymapi.Vec3(0.0, 0.0, -9.8)
+        
 
         sim_params.use_gpu_pipeline = cfg["sim_params"]["use_gpu"]
-        sim_params = gymapi.SimParams()
+        sim_params.dt = dt_
+        # sim_params = gymapi.SimParams()
         sim_pars = gymutil.parse_sim_config(vars(sim), sim_params)
         # sim_params = sim_pars
         if args.use_gpu_pipeline:

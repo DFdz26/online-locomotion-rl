@@ -9,7 +9,7 @@
     "dof_drive_mode": "FORCE",
     "terminate_after_contacts_on": ["thigh", "hip"],
     "penalization_contacts_on": ["calf"],
-    "foot_contacts_on": "foot",
+    "foot_contacts_on": "calf",
     "goal_height": 0.32,
     "initial_postion": {
       "y": 0.0,

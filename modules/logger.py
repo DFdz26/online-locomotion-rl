@@ -26,7 +26,7 @@ class DataStore:
         refreshed = False
 
         if new_record > self.record:
-            self.weights = weights.detach().clone()
+            self.weights = weights
             self.noise = noise.detach().clone()
             self.iteration = iteration
             refreshed = True
@@ -150,7 +150,9 @@ class Logger:
             self.ax.plot(xpoints, ypoints)
         else:
             xpoints = np.array(self.x_axis)
-            ypoints = np.array(self.mean_reward)
+            ypoints = np.array([r * 10 for r in self.mean_reward])
+
+            self.ax[0].clear()
 
             self.ax[0].set_title("Avg. reward vs iteration")
             self.ax[0].set_xlabel("Iteration")
@@ -158,6 +160,8 @@ class Logger:
 
             self.ax[0].plot(xpoints, ypoints)
             ypoints = np.array(self.mean_distances)
+            
+            self.ax[1].clear()
 
             self.ax[1].set_title("Avg. distance (m) vs iteration")
             self.ax[1].set_xlabel("Iteration")

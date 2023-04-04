@@ -14,12 +14,13 @@ from isaacGymConfig.Rewards import Rewards
 
 class Runner:
     def __init__(self, policy, learning_algorithm, logger: Logger, config_file, env_config, reward: Rewards,
-                 num_actions, verbose=False, store_observations=False):
-        self.agents = RobotConfig(config_file, env_config, reward, verbose)
+                 num_actions, terrain_config=None, curricula=None, verbose=False, store_observations=False):
+        self.agents = RobotConfig(config_file, env_config, reward, terrain_config, curricula, verbose)
         self.policy = policy
         self.logger = logger
         self.learning_algorithm = learning_algorithm
         self.rewards = reward
+        self.curricula = curricula
         self.num_actions = num_actions
         self.num_observations = 1
         self.best_distance = True
@@ -84,17 +85,23 @@ class Runner:
 
             if closed_simulation:
                 break
-
-            rewards = self.agents.compute_final_reward() * 0.5
+            
+            final_reward = self.agents.compute_final_reward()
+            rewards = final_reward * 0.5
             self.learning_algorithm.last_step(self.obs)
 
             self._learning_process_(i, rewards)
 
             if (i + 1) != iterations:
+                # In case of having curriculum, update it
+                if not(self.curricula is None):
+                    self.curricula.set_control_parameters(i, final_reward)
+
                 # Reset the environments, the reward buffers and get the first observation
                 self.rewards.clean_buffers()
                 self.agents.reset_all_envs()
                 self.obs = self.agents.create_observations()
+                
 
     def test_agent(self):
         pass

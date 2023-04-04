@@ -1,8 +1,10 @@
 import torch
+import time
 
 rep_keyword = 'rep'
 root_keyword = 'root_state'
 base_lin_vel_keyboard = 'base_lin_vel'
+base_previous_lin_vel_keyboard = 'base_previous_lin_vel'
 base_ang_vel_keyboard = 'base_ang_vel'
 previous_position_keyword = 'previous_position'
 initial_keyword = 'initial_state'
@@ -10,7 +12,12 @@ projected_gravity_keyword = 'projected_gravity'
 contact_forces_gravity_keyword = 'contact_forces'
 termination_contact_indices_keyword = 'termination_contact_indices'
 penalization_contact_indices_keyword = 'penalization_contact_indices'
+foot_contact_indices_keyword = 'foot_contact_indices'
 goal_height_keyword = 'goal_height'
+joint_velocity_keyword = 'joint_velocity'
+foot_velocity_keyword = 'feet_velocity'
+previous_joint_velocity_keyboard = 'previous_joint_velocity'
+dt_simulation_keyboard = 'dt_sim'
 
 
 class IndividualReward:
@@ -21,14 +28,53 @@ class IndividualReward:
         self.x_distance = None
         self.y_distance = None
 
+        self.iteration = 0
+
     ###############################################################################################
 
     """
     Preparation of the buffers
     """
+    def _prepare_buffer_smoothness_term_(self):
+        self.prev_acc = None
+        self.prev_speed = None
+        self.jerk_buffer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                    requires_grad=False)
+        
+    def _prepare_buffer_z_vel_term_(self):
+        self.accumulative_error_z_speed = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                    requires_grad=False)
+        
+    def _prepare_buffer_y_velocity_term_(self):
+        self.accumulative_error_y_velocity = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                    requires_grad=False)
+        
+    def _prepare_buffer_x_velocity_term_(self):
+        self.accumulative_error_x_velocity = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                    requires_grad=False)
+
+    def _prepare_buffer_roll_pitch_term_(self):
+        self.accumulative_error_roll_pitch = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                    requires_grad=False)
+
+    def _prepare_buffer_yaw_vel_term_(self):
+        self.accumulative_error_yaw = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                    requires_grad=False)
+
+    def _prepare_buffer_slippery_term_(self):
+        self.slippery_buffer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                    requires_grad=False)
 
     def _prepare_buffer_x_distance_term_(self):
         pass
+
+    def _prepare_buffer_vel_cont_term_(self):
+        self.accumulative_vel_cont_error = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                    requires_grad=False)
+
+    def _prepare_buffer_vibration_term_(self):
+        self.accumulative_vibration_term = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                    requires_grad=False)
 
     def _prepare_buffer_y_distance_term_(self):
         pass
@@ -67,6 +113,55 @@ class IndividualReward:
 
         self.x_distance_step = actual_position - previous_position
         return self.x_distance_step
+    
+    def _compute_in_state_slippery_term_(self, simulation_info, reward_data):
+        # Check if any foot is in contact with the ground
+        contact_forces = simulation_info[contact_forces_gravity_keyword]
+        foot_indices = simulation_info[foot_contact_indices_keyword]
+        current_foot_vel = simulation_info[foot_velocity_keyword]
+        slipperiness_penalty_coef = reward_data["slippery_coef"]
+
+        in_contact = torch.norm(contact_forces[:, foot_indices, :], dim=-1) > 1.
+
+        # Penalize the slipperiness of each foot that is in contact with the ground
+        in_state_slipperiness_penalty = slipperiness_penalty_coef * torch.square(torch.sum(torch.norm(current_foot_vel, dim=-1) * in_contact, dim=-1))
+
+        self.slippery_buffer += in_state_slipperiness_penalty
+
+        return in_state_slipperiness_penalty
+    
+    def _compute_in_state_smoothness_term_(self, simulation_info, reward_data):
+
+        speed = simulation_info[joint_velocity_keyword]
+        jerk_coef = reward_data['jerk_coef']
+        dt = simulation_info[dt_simulation_keyboard]
+        
+        if self.prev_speed is None:
+            self.prev_speed = speed.detach().clone()
+            return torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        
+
+        acceleration = (speed - self.prev_speed) / dt
+        jerk = torch.abs(acceleration - self.prev_acc) if self.prev_acc is not None else torch.abs(acceleration)
+        self.prev_acc = acceleration
+        
+        self.prev_speed = speed.detach().clone()
+        int_state = jerk_coef * torch.sum(jerk, dim=-1)
+
+        self.jerk_buffer += int_state
+        return int_state
+
+
+    def _compute_in_state_vibration_term_(self, simulation_info, reward_data):
+        dt_sim = simulation_info[dt_simulation_keyboard]
+        previous_dof_vel = simulation_info[previous_joint_velocity_keyboard]
+        actual_dof_vel = simulation_info[joint_velocity_keyword]
+
+        acceleration_dof_sq = torch.sum(torch.square((previous_dof_vel - actual_dof_vel) / dt_sim), dim=1)
+        in_state = torch.sum(0.01 * torch.square(actual_dof_vel) + acceleration_dof_sq, dim=1)
+
+        self.accumulative_vibration_term += in_state
+        return in_state        
 
     def _compute_in_state_y_distance_term_(self, simulation_info, reward_data):
         previous_position = simulation_info[previous_position_keyword][:, 1]
@@ -140,6 +235,109 @@ class IndividualReward:
         self.accumulative_height_error += in_state
 
         return in_state
+    
+    def _compute_in_state_z_vel_term_(self,simulation_info, reward_data):
+        weight = reward_data["weight"]
+        exponential = reward_data["exponential"]
+        
+        z_vel = simulation_info[base_lin_vel_keyboard][:, 2]
+
+        if exponential:
+            divider = reward_data["divider"]
+            in_state = weight * self.__error_in_speed_int(z_vel, 0, True, divider)
+        else:
+            in_state = weight * torch.square(z_vel)
+
+        self.accumulative_error_z_speed += in_state
+
+        return in_state
+    
+    def _compute_in_state_roll_pitch_term_(self,simulation_info, reward_data):
+        weight = reward_data["weight"]
+        exponential = reward_data["exponential"]
+        
+        x_ang_vel = simulation_info[base_ang_vel_keyboard][:, 0]
+        y_ang_vel = simulation_info[base_ang_vel_keyboard][:, 1]
+
+        if exponential:
+            divider = reward_data["divider"]
+            in_state = weight * self.__error_in_speed_int(x_ang_vel, 0, True, divider)
+            in_state += weight * self.__error_in_speed_int(y_ang_vel, 0, True, divider)
+        else:
+            in_state = (1.25*weight) * torch.abs(x_ang_vel) + weight * torch.abs(y_ang_vel)
+
+        self.accumulative_error_roll_pitch += in_state
+
+        return in_state
+    
+    def _compute_in_state_yaw_vel_term_(self,simulation_info, reward_data):
+        weight = reward_data["weight"]
+        command = reward_data["command"]
+        exponential = reward_data["exponential"]
+        
+        z_ang_vel = simulation_info[base_ang_vel_keyboard][:, 2]
+
+        if exponential:
+            divider = reward_data["divider"]
+            in_state = weight * self.__error_in_speed_int(z_ang_vel, command, True, divider)
+        else:
+            in_state = weight * torch.abs(z_ang_vel - command) 
+
+        self.accumulative_error_yaw += in_state
+
+        return in_state 
+
+    def _compute_in_state_y_velocity_term_(self,simulation_info, reward_data):
+        y_vel = simulation_info[base_lin_vel_keyboard][:, 1]
+        weight = reward_data["weight"]
+
+        exponential = reward_data["exponential"]
+
+        if exponential:
+            divider = reward_data["divider"]
+            in_state = weight * self.__error_in_speed_int(y_vel, 0, True, divider)
+        else:
+            in_state = weight * torch.abs(y_vel)
+
+        self.accumulative_error_y_velocity += in_state
+
+        return in_state
+    
+    def _compute_in_state_x_velocity_term_(self,simulation_info, reward_data):
+        x_vel = simulation_info[base_lin_vel_keyboard][:, 0]
+        weight = reward_data["weight"]
+
+        # if self.iteration % 10 == 0:
+        #     print(f"x_vel: {x_vel}")
+        
+        # self.iteration += 1
+        # self.iteration %+ 10
+
+        exponential = reward_data["exponential"]
+
+        if exponential:
+            divider = reward_data["divider"]
+            goal = reward_data["goal"]
+            in_state = weight * self.__error_in_speed_int(x_vel, goal, True, divider)
+        else:
+            in_state = weight * x_vel
+
+        self.accumulative_error_x_velocity += in_state
+
+        return in_state
+    
+    def _compute_in_state_torque_term_(self,simulation_info, reward_data):
+        pass
+
+    def _compute_in_state_vel_cont_term_(self,simulation_info, reward_data):
+        x_vel = simulation_info[base_lin_vel_keyboard][:, 0]
+        previous_vel = simulation_info[base_previous_lin_vel_keyboard][:, 0]
+
+        in_state = torch.sqrt(torch.abs(x_vel - previous_vel))
+        self.accumulative_vel_cont_error += in_state
+
+        return in_state
+
 
     ###############################################################################################
 
@@ -162,6 +360,33 @@ class IndividualReward:
             return torch.abs(self.y_distance)
         else:
             return self.y_distance
+        
+    def _compute_final_x_velocity_term_(self, simulation_info, reward_data):
+        return self.accumulative_error_x_velocity
+    
+    def _compute_final_y_velocity_term_(self, simulation_info, reward_data):
+        return self.accumulative_error_y_velocity
+
+    def _compute_final_z_vel_term_(self, simulation_info, reward_data):
+        return self.accumulative_error_z_speed
+
+    def _compute_final_roll_pirch_term_(self, simulation_info, reward_data):
+        return self.accumulative_error_roll_pitch
+    
+    def _compute_final_yaw_vel_term_(self, simulation_info, reward_data):
+        return self.accumulative_error_yaw
+
+    def _compute_final_slippery_term_(self, simulation_info, reward_data):
+        return self.slippery_buffer
+
+    def _compute_final_smoothness_term_(self, simulation_info, reward_data):
+        return self.jerk_buffer
+    
+    def _compute_final_vel_cont_term_(self,simulation_info, reward_data):
+        return self.accumulative_vel_cont_error
+
+    def _compute_final_vibration_term_(self, simulation_info, reward_data):
+        return self.accumulative_vibration_term
 
     def _compute_final_stability_term_(self, simulation_info, reward_data):
         rep = simulation_info[rep_keyword]
@@ -230,6 +455,33 @@ class IndividualReward:
         self.x_distance = None
         self.x_distance_step = None
 
+    def _clean_buffer_vel_cont_(self):
+        self.accumulative_vel_cont_error.fill_(0)
+
+    def _clean_buffer_slippery_(self):
+        self.slippery_buffer.fill_(0)
+
+    def _clean_buffer_z_vel_(self):
+        self.accumulative_error_z_speed.fill_(0)
+
+    def _clean_buffer_x_velocity_(self):
+        self.accumulative_error_x_velocity.fill_(0)
+
+    def _clean_buffer_y_velocity_(self):
+        self.accumulative_error_y_velocity.fill_(0)
+
+    def _clean_buffer_roll_pitch_(self):
+        self.accumulative_error_roll_pitch.fill_(0)
+
+    def _clean_buffer_yaw_vel_(self):
+        self.accumulative_error_yaw.fill_(0)
+
+    def _clean_buffer_smoothness_(self):
+        self._prepare_buffer_smoothness_term_()
+
+    def _clean_buffer_vibration_(self):
+        self.accumulative_vibration_term.fill_(0)
+    
     def _clean_buffer_y_distance_(self):
         self.y_distance = None
         self.y_distance_step = None
@@ -256,13 +508,21 @@ class IndividualReward:
 
 
 class Rewards(IndividualReward):
-    def __init__(self, num_envs, device, rewards, gamma, steps):
+    def __init__(self, num_envs, device, rewards, gamma, steps, discrete_rewards=False):
         super().__init__(num_envs, device)
         self.reward_terms = None
         self.gamma = gamma
-        self.actual_gama = gamma
+        self.current_gama = 1.
         self.steps = steps
+        self.iterations = 0
+        self.previous_time = 0
+        self.current_reward = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.discrete_rewards = discrete_rewards
+
         self.change_rewards(rewards)
+
+    def get_rewards(self):
+        return self.reward_terms
 
     def change_rewards(self, rewards):
         self.reward_terms = rewards
@@ -273,6 +533,12 @@ class Rewards(IndividualReward):
 
     def compute_rewards_in_state(self, simulation_info):
         rw = 0
+        current_time = time.time()
+        dt = 0.005 if not self.previous_time else current_time - self.previous_time
+
+        simulation_info[dt_simulation_keyboard] = dt
+            
+        self.previous_time = time.time()
 
         for reward_name in self.reward_terms.keys():
             reward_data = None if not ("reward_data" in self.reward_terms[reward_name]) else \
@@ -284,32 +550,46 @@ class Rewards(IndividualReward):
             if weight == 0.0:
                 continue
 
-            rw += ind_rw * weight/self.steps
+            # if self.iterations % 10 == 0:
+            #     print(f'{reward_name}: {ind_rw}')
 
-        self.actual_gama *= self.actual_gama
+            rw += ind_rw * weight/self.steps
+        
+        self.iterations += 1
+        self.current_reward += rw * self.current_gama
+
+        self.current_gama *= self.gamma
         return rw
 
     def compute_final_reward(self, simulation_info):
         reward = 0
-        for reward_name in self.reward_terms.keys():
-            weight = self.reward_terms[reward_name]['weight']
-            reward_data = None if not ("reward_data" in self.reward_terms[reward_name]) else \
-                self.reward_terms[reward_name]['reward_data']
 
-            individual_reward = getattr(self, '_compute_final_' + reward_name + '_term_')(simulation_info, reward_data)
+        if self.discrete_rewards:
+            return self.current_reward
+        else:
+            for reward_name in self.reward_terms.keys():
+                weight = self.reward_terms[reward_name]['weight']
+                reward_data = None if not ("reward_data" in self.reward_terms[reward_name]) else \
+                    self.reward_terms[reward_name]['reward_data']
 
-            if weight == 0.0:
-                continue
+                individual_reward = getattr(self, '_compute_final_' + reward_name + '_term_')(simulation_info, reward_data)
 
-            reward += individual_reward * weight
+                if weight == 0.0:
+                    continue
 
-        return reward
+                reward += individual_reward * weight
+
+            return reward
 
     def clean_buffers(self):
-        self.actual_gama = self.gamma
+        self.actual_gama = 1.
+        self.previous_time = 0
+        self.current_reward.fill_(0)
 
         for reward_name in self.reward_terms.keys():
             getattr(self, '_clean_buffer_' + reward_name + '_')()
+
+        self.iterations = 0
 
 
 if __name__ == "__main__":

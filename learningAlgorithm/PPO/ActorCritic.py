@@ -48,6 +48,9 @@ class ActorCritic(nn.Module):
 
     def get_weights(self):
         return [self.actor_NN, self.critic_NN] 
+    
+    def load_weights(self, actor_critic):
+        self.actor_NN, self.critic_NN = actor_critic
 
     def forward(self):
         pass
@@ -130,6 +133,7 @@ class ActorCritic(nn.Module):
 
         for h in range(len(args.hidden_dim)):
             layers.append(nn.Linear(size_input, args.hidden_dim[h]))
+            #nn.init.normal_(layers[-1].weight, mean=0.0, std=0.0)
 
             if not(activation is None):
                 layers.append(activation)
@@ -137,6 +141,7 @@ class ActorCritic(nn.Module):
             size_input = args.hidden_dim[h]
 
         layers.append(nn.Linear(size_input, args.outputs[0]))
+        #nn.init.normal_(layers[-1].weight, mean=0.0, std=0.0)
 
         return layers
 

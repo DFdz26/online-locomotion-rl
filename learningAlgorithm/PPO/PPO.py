@@ -7,7 +7,7 @@ date: 28 February 2023
 PPO learning algorithm
 """
 
-import torch
+import torch 
 import torch.nn as nn
 import torch.optim as optim
 
@@ -16,17 +16,30 @@ from .Memory import Memory
 
 
 class PPOArgs:
-    value_loss_coef = 1.0
+    # value_loss_coef = 1.1
+    # value_loss_coef = 150.
+    value_loss_coef = 15000.
     clip_param = 0.2
-    entropy_coef = 0.01
+    entropy_coef = 0.0008
     num_learning_epochs = 5
-    num_mini_batches = 4  # mini batch size = num_envs*nsteps / nminibatches
-    learning_rate = 1.e-3  # 5.e-4
-    schedule = 'adaptive'  # could be adaptive, fixed
+    num_mini_batches = 400  # mini batch size = num_envs*nsteps / nminibatches
+    # num_mini_batches = 400  # mini batch size = num_envs*nsteps / nminibatches
+    learning_rate = 0.0000003  # 5.e-4
+    # learning_rate = 0.00000015  # 5.e-4
+    schedule = 'fixed'  # could be adaptive, fixed
+    # schedule = 'adaptive'  # could be adaptive, fixed
     gamma = 0.99
     lam = 0.95
+    # desired_kl = 0.01
     desired_kl = 0.01
     max_grad_norm = 1.
+
+    # max_clipped_learning_rate = 1.e-3
+    max_clipped_learning_rate = 0.00019
+    # max_clipped_learning_rate = 1.e-2
+    # min_clipped_learning_rate = 5.e-6
+    min_clipped_learning_rate = 0.000008
+    # min_clipped_learning_rate = 1.e-5
 
 
 class PPO:
@@ -122,7 +135,11 @@ class PPO:
 
     def update(self, policy, rewards):
         mean_value_loss = 0
+        mean_entropy = 0
         mean_surrogate_loss = 0
+        kl_mean_tot = 0
+        lr_mean_tot = 0
+        mean_loss = 0
 
         for obs_batch, critic_obs_batch, actions_batch, target_values_batch, advantages_batch, \
             returns_batch, old_actions_log_prob_batch, old_mu_batch, \
@@ -145,14 +162,25 @@ class PPO:
                                 torch.square(old_sigma_batch) + torch.square(old_mu_batch - mu_batch)) / (
                                 2.0 * torch.square(sigma_batch)) - 0.5, axis=-1)
                     kl_mean = torch.mean(kl)
+                    kl_mean_tot += float(kl_mean)
 
                     if kl_mean > PPOArgs.desired_kl * 2.0:
-                        self.learning_rate = max(1e-5, self.learning_rate / 1.5)
+                        self.learning_rate = max(PPOArgs.min_clipped_learning_rate, self.learning_rate / 1.5)
                     elif PPOArgs.desired_kl / 2.0 > kl_mean > 0.0:
-                        self.learning_rate = min(1e-2, self.learning_rate * 1.5)
+                        self.learning_rate = min(PPOArgs.max_clipped_learning_rate, self.learning_rate * 1.5)
+
+                    lr_mean_tot += self.learning_rate
 
                     for param_group in self.optimizer.param_groups:
                         param_group['lr'] = self.learning_rate
+            else:
+                with torch.inference_mode():
+                    kl = torch.sum(
+                        torch.log(sigma_batch / old_sigma_batch + 1.e-5) + (
+                                torch.square(old_sigma_batch) + torch.square(old_mu_batch - mu_batch)) / (
+                                2.0 * torch.square(sigma_batch)) - 0.5, axis=-1)
+                    kl_mean = torch.mean(kl)
+                    kl_mean_tot += float(kl_mean)
 
             # Surrogate loss
             ratio = torch.exp(actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch))
@@ -167,6 +195,8 @@ class PPO:
             value_loss = (returns_batch - value_batch).pow(2).mean()
 
             loss = surrogate_loss + PPOArgs.value_loss_coef * value_loss - PPOArgs.entropy_coef * entropy_batch.mean()
+            # loss = -loss
+            mean_loss += float(loss)
 
             # Gradient step
             self.optimizer.zero_grad()
@@ -176,14 +206,23 @@ class PPO:
 
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
+            mean_entropy += entropy_batch.mean()
 
         num_updates = PPOArgs.num_learning_epochs * PPOArgs.num_mini_batches
         mean_value_loss /= num_updates
         mean_surrogate_loss /= num_updates
+        mean_entropy /= num_updates
+        mean_loss /= num_updates
+        kl_mean_tot /= num_updates
+        lr_mean_tot /= num_updates
         self.memory.clear()
 
         return {"mean_value_loss": mean_value_loss,
-                "mean_surrogate_loss": mean_surrogate_loss}
+                "mean_surrogate_loss": mean_surrogate_loss,
+                "entropy": mean_entropy,
+                "lr": lr_mean_tot,
+                "mean_loss": mean_loss,
+                "kl_mean": kl_mean_tot}
 
     @staticmethod
     def get_noise():

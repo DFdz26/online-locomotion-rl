@@ -11,6 +11,8 @@ from .BaseConfiguration import BaseConfiguration
 from .Rewards import rep_keyword, root_keyword, initial_keyword, projected_gravity_keyword, \
     contact_forces_gravity_keyword, previous_position_keyword
 from .Rewards import termination_contact_indices_keyword, penalization_contact_indices_keyword, goal_height_keyword
+from .Rewards import foot_contact_indices_keyword, joint_velocity_keyword, foot_velocity_keyword
+from .Rewards import base_lin_vel_keyboard, base_ang_vel_keyboard, base_previous_lin_vel_keyboard
 
 import time
 
@@ -33,7 +35,7 @@ def convert_drive_mode(mode_str):
 
 class RobotConfig(BaseConfiguration):
     # def __init__(self, config_file, env_config, nn, learning_algorithm, logger, rewards, verbose=False):
-    def __init__(self, config_file, env_config, rewards, verbose=False):
+    def __init__(self, config_file, env_config, rewards, terrain_config=None, curricula=None, verbose=False):
         with open(config_file) as f:
             self.cfg = json.load(f)
 
@@ -41,6 +43,7 @@ class RobotConfig(BaseConfiguration):
         dir_path = os.path.dirname(os.path.realpath(__file__))
         self.use_gpu = self.cfg["sim_params"]["use_gpu"]
         self.env_config = env_config
+        self.terrain_config = terrain_config
 
         self.asset_root = os.path.join(dir_path, relative_model_folder)
         self.asset_file = self.cfg["asset_options"]["asset_filename"]
@@ -50,6 +53,7 @@ class RobotConfig(BaseConfiguration):
         self.rollout = 0
         self.rep = 0
         self.n_step = 0
+        self.curricula = curricula
 
         self.rewards = rewards
         self.config_intial_position = [self.cfg["asset_options"]["initial_postion"][axis]
@@ -91,7 +95,7 @@ class RobotConfig(BaseConfiguration):
         self.started_position = None
         self.previous_robot_position = None
 
-        self.__create_plane()
+        self._create_terrain_()
         self.__create_robot(self.num_envs, verbose=verbose)
         self.__prepare_sim()
 
@@ -102,6 +106,7 @@ class RobotConfig(BaseConfiguration):
         self.dof_state = None
         self.dof_pos = None
         self.dof_vel = None
+        self.previous_dof_vel = None
         self.base_quat = None
 
         self.__prepare_buffers()
@@ -115,11 +120,19 @@ class RobotConfig(BaseConfiguration):
 
     def get_asset_name(self):
         return self.asset_name
+    
+    def next_curriculum_level(self):
+        pass
 
-    def __create_plane(self):
-        plane_params = gymapi.PlaneParams()
-        plane_params.normal = gymapi.Vec3(0, 0, 1)
-        self.gym.add_ground(self.sim, plane_params)
+    def _create_terrain_(self):
+
+        if self.terrain_config is None:
+            plane_params = gymapi.PlaneParams()
+            plane_params.normal = gymapi.Vec3(0, 0, 1)
+            self.gym.add_ground(self.sim, plane_params)
+        else:
+            tm_params, vertices, triangles = self.terrain_config.build_terrain()
+            self.gym.add_triangle_mesh(self.sim, vertices.flatten(), triangles.flatten(), tm_params)
 
     def _reset_root(self):
 
@@ -130,6 +143,7 @@ class RobotConfig(BaseConfiguration):
 
         self.root_states[env_ids, :3] = self.started_position[env_ids]
         self.previous_robot_position[env_ids, :3] = self.root_states[:, :3].detach().clone()
+        self.previous_robot_velocity[env_ids, :3] = 0.
 
         a = [0., 0., 0., 1]
         self.init_root_state[env_ids, :3] = self.root_states[env_ids, :3]
@@ -152,6 +166,7 @@ class RobotConfig(BaseConfiguration):
         for i in range(self.num_envs):
             self.dof_pos[i] = self.default_dof_pos
             self.dof_vel[i] = 0.
+            self.previous_dof_vel[i] = 0.
 
         env_ids_int32 = env_ids.to(dtype=torch.int32)
         self.gym.set_dof_state_tensor_indexed(self.sim,
@@ -159,6 +174,9 @@ class RobotConfig(BaseConfiguration):
                                               gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
     def reset_all_envs(self):
+        if not(self.curricula is None):
+            self.started_position = self.curricula.get_terrain_curriculum(self.started_position)
+
         self._reset_root()
         self._reset_dofs()
 
@@ -195,7 +213,7 @@ class RobotConfig(BaseConfiguration):
         self.gym.refresh_mass_matrix_tensors(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
 
-    def compute_final_reward(self):
+    def build_simulation_info(self):
         simulation_info = {
             rep_keyword: self.rep,
             root_keyword: self.root_states,
@@ -206,7 +224,18 @@ class RobotConfig(BaseConfiguration):
             termination_contact_indices_keyword: self.termination_contact_indices,
             penalization_contact_indices_keyword: self.penalization_contact_indices,
             goal_height_keyword: self.goal_height,
+            foot_contact_indices_keyword: self.feet_indices,
+            joint_velocity_keyword: self.dof_vel,
+            foot_velocity_keyword: self.foot_velocities,
+            base_lin_vel_keyboard: self.base_lin_vel,
+            base_ang_vel_keyboard: self.base_ang_vel,
+            base_previous_lin_vel_keyboard: self.previous_robot_velocity
         }
+        
+        return simulation_info
+
+    def compute_final_reward(self):
+        simulation_info = self.build_simulation_info()
 
         rewards = self.rewards.compute_final_reward(simulation_info)
         return rewards
@@ -228,20 +257,11 @@ class RobotConfig(BaseConfiguration):
             max_length = self.rollout_time / self.env_config.dt
             self.rep += 1
 
-            simulation_info = {
-                rep_keyword: self.rep,
-                root_keyword: self.root_states,
-                previous_position_keyword: self.previous_robot_position,
-                initial_keyword: self.started_position,
-                projected_gravity_keyword: self.projected_gravity,
-                contact_forces_gravity_keyword: self.contact_forces,
-                termination_contact_indices_keyword: self.termination_contact_indices,
-                penalization_contact_indices_keyword: self.penalization_contact_indices,
-                goal_height_keyword: self.goal_height,
-            }
+            simulation_info = self.build_simulation_info()
 
             self.reward = self.rewards.compute_rewards_in_state(simulation_info)
             self.previous_robot_position = self.root_states[:, :3].detach().clone()
+            self.previous_robot_velocity = self.base_lin_vel.detach().clone()
             self.check_termination()
 
     def __prepare_distance_and_termination_rollout_buffers_(self):
@@ -324,9 +344,6 @@ class RobotConfig(BaseConfiguration):
                 self.d_gains[i] = 0.
                 print(f"PD gain of joint {name} were not defined, setting them to zero")
 
-        self.joint_pos_target = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
-        self.joint_pos_target = self.joint_pos_target.unsqueeze(0)
-
         body_names = self.gym.get_asset_rigid_body_names(self.robot_assets)
 
         termination_contact_names = []
@@ -352,6 +369,9 @@ class RobotConfig(BaseConfiguration):
                                                                                          penalization_contact_names[i])
 
         feet_names = [s for s in body_names if self.cfg["asset_options"]["foot_contacts_on"] in s]
+        
+        print(body_names)
+        print(feet_names)
         self.feet_indices = torch.zeros(len(feet_names), dtype=torch.long, device=self.device, requires_grad=False)
         for i in range(len(feet_names)):
             self.feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0],
@@ -361,8 +381,9 @@ class RobotConfig(BaseConfiguration):
         self.foot_velocities = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:,
                                self.feet_indices,
                                7:10]
-
+        
         self.finished = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
+        self.previous_dof_vel = self.dof_vel.detach().clone()
 
         self.__prepare_distance_and_termination_rollout_buffers_()
         self.rewards.prepare_buffers()
@@ -441,6 +462,7 @@ class RobotConfig(BaseConfiguration):
         obs = None
 
         closed_simulation = self.compute_graphics()
+        self.previous_dof_vel = self.dof_vel.detach().clone()
 
         if not closed_simulation:
             for _ in range(iterations_without_control):
@@ -449,14 +471,6 @@ class RobotConfig(BaseConfiguration):
                 # step the physics
                 self.gym.simulate(self.sim)
                 self.gym.fetch_results(self.sim, True)
-
-                # update the viewer
-                # self.gym.step_graphics(self.sim)
-                # self.gym.draw_viewer(self.viewer, self.sim, True)
-                #
-                # # Wait for dt to elapse in real time.
-                # # This synchronizes the physics simulation with the rendering rate.
-                # self.gym.sync_frame_time(self.sim)
 
                 self._refresh_gym_tensors_()
             self.post_step()
@@ -484,11 +498,21 @@ class RobotConfig(BaseConfiguration):
         return ending
 
     def create_observations(self):
+        # obs = torch.cat((
+        #     self.projected_gravity,
+        #     (self.dof_pos - self.default_dof_pos),
+        #     self.dof_vel * 0.05,
+        #     self.actions),
+        #     dim=-1
+        # )
+
         obs = torch.cat((
             self.projected_gravity,
             (self.dof_pos - self.default_dof_pos),
-            self.dof_vel,
-            self.actions),
+            self.dof_vel * 0.05,
+            self.actions,
+            self.base_ang_vel * 0.25,
+            self.base_lin_vel * 2.0),
             dim=-1
         )
 
@@ -579,6 +603,7 @@ class RobotConfig(BaseConfiguration):
         num_per_row = int(math.sqrt(num_robots))
         self.started_position = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
         self.previous_robot_position = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
+        self.previous_robot_velocity = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
 
         if verbose:
             print("Creating %d environments" % num_robots)
@@ -587,7 +612,8 @@ class RobotConfig(BaseConfiguration):
             # Create one environment
 
             env = self.gym.create_env(self.sim, lower, upper, num_per_row)
-            pos_aux_p[1] = i * self.env_config.spacing_env
+            pos_aux_p[1] = i%self.env_config.num_env_colums * self.env_config.spacing_env
+            pos_aux_p[0] = math.floor(i/self.env_config.num_env_colums) * self.env_config.spacing_env_x
             self.started_position[i] = torch.FloatTensor(pos_aux_p).to(self.device)
             self.previous_robot_position[i] = self.started_position[i]
             pose.p = gymapi.Vec3(*pos_aux_p)
@@ -606,3 +632,6 @@ class RobotConfig(BaseConfiguration):
 
             self.envs.append(env)
             self.robot_handles.append(robot_handle)
+
+        if not(self.curricula is None):
+            self.curricula.set_initial_positions(self.started_position)

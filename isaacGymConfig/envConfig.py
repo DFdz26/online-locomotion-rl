@@ -15,10 +15,12 @@ class EnvConfig:
         self.default_joints_angles = None
         self.rollout_time = 3
         self.num_env = 1
-        self.spacing_env = -3.5
+        self.spacing_env = -2
+        self.spacing_env_x = 2
         self.dt = 0.005
         self.disable_leg = False
-        
+        self.num_env_colums = 10
+
         self.actions_scale = 0.2
         self.hip_scale = 0.5
 

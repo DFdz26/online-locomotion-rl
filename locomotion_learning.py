@@ -29,41 +29,41 @@ graph_name = "graph_minicheeta_learning"
 # graph_name = "graph_b1_learning"
 
 SAVE_DATA = False
-LOAD_CACHE = False
+LOAD_CACHE = True
 
 reward_list = {
     "x_distance": {
-        "weight": 1.6,
+        "weight": 0.01,
         "reward_data": {
             "absolute_distance": False
         }
     },
 
-    "y_distance": {
-        "weight": -1.,
-        "reward_data": {
-            "absolute_distance": True
-        }
-    },
+    # "y_distance": {
+    #     "weight": -100.,
+    #     "reward_data": {
+    #         "absolute_distance": True
+    #     }
+    # },
 
-    "stability": {
-        "weight": -1.1,
-        "reward_data": {
-            "absolute_distance": False,
-            "weights": {
-                "std_height": 1.3,
-                "mean_x_angle": 1.3,
-                "mean_y_angle": 1.1,
-                "mean_z_angle": 1.3,
-                "distance": 0.5,
-            }
-        }
-    },
+    # "stability": {
+    #     "weight": -1.1,
+    #     "reward_data": {
+    #         "absolute_distance": True,
+    #         "weights": {
+    #             "std_height": 1.3,
+    #             "mean_x_angle": 1.3,
+    #             "mean_y_angle": 1.1,
+    #             "mean_z_angle": 1.3,
+    #             "distance": 0.5,
+    #         }
+    #     }
+    # },
 
     "high_penalization_contacts": {
-        "weight": -1.,
+        "weight": -0.5,
         "reward_data": {
-            "absolute_distance": False,
+            "absolute_distance": True,
             "max_clip": 2.5,
             "weights": {
                 "correction_state": 0.02,
@@ -73,22 +73,69 @@ reward_list = {
     },
 
     "height_error": {
-        "weight": -1.,
+        "weight": -2.9,
         "reward_data": {
             "max_clip": 2.5,
         }
     },
+
+    "slippery": {
+        "weight": 1.,
+        "reward_data": {
+            "slippery_coef": -0.008,
+        }
+    },
+
+    "smoothness": {
+        "weight": 1.,
+        "reward_data": {
+            "jerk_coef": -0.000005,
+        }
+    },
+    
+    "z_vel": {
+        "weight": 0.1,
+        "reward_data": {
+            "exponential": False,
+            "weight": -0.2
+        }
+    },
+
+    "roll_pitch": {
+        "weight": 0.05,
+        "reward_data": {
+            "exponential": False,
+            "weight": -0.1
+        }
+    },
+        
+    "y_velocity": {
+        "weight": 0.1,
+        "reward_data": {
+            "exponential": False,
+            "weight": -0.05
+        }
+    },
+    
+    "x_velocity": {
+        "weight": 1.,
+        "reward_data": {
+            "exponential": False,
+            "weight": 0.1
+        }
+    },
+
 }
 
 n_kernels = 20
-variance = 0.036
-decay = 0.992
+variance = 0.034
+decay = 0.998
 h = 10
 rollouts = 15
 noise_boost = 1.5
 dt = 0.005
 seconds_iteration = 6
-max_iterations = 151
+max_iterations = 301
 step_env = int(seconds_iteration/dt)
 step_env = int(seconds_iteration/0.01)
 
@@ -136,7 +183,7 @@ cpg_rbf_nn = CPGRBFN(config, dimensions=rollouts, load_cache=LOAD_CACHE)
 n_out = cpg_rbf_nn.get_n_outputs()
 print(f"n_out: {n_out}")
 
-reward_obj = Rewards(rollouts, "cuda:0", reward_list, 1, step_env)
+reward_obj = Rewards(rollouts, "cuda:0", reward_list, 0.999999, step_env, discrete_rewards=True)
 pibb = PIBB(rollouts, h, 1, n_kernels*n_out, decay, variance, device="cuda:0", boost_noise=noise_boost)
 logger = Logger(save=SAVE_DATA, frequency=10, PIBB_param=pibb.get_hyper_parameters(), nn_config=config)
 env_config = EnvConfig()
