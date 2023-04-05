@@ -138,20 +138,27 @@ class AlgorithmCurriculum:
 
         RewardObj.change_rewards(rw_weights)
 
+    def _start_PPO_(self, RewardObj):
+        self.PPO_activated = True
+        self.PPO_learning_activated = True
+
+        if self.cfg.PPOCfg.change_RW_scales:
+            self._change_RW_scales_(RewardObj)
+
     def set_control_parameters(self, iterations, reward, distance, RewardObj, learningObj):
         self.iteration = iterations
 
         if 0 < self.cfg.PPOCfg.start_iteration_learning == iterations:
-            self.PPO_activated = True
-            self.PPO_learning_activated = True
-
-            if self.cfg.PPOCfg.change_RW_scales:
-                self._change_RW_scales_(RewardObj)
+            self._start_PPO_(RewardObj)
 
         if self.cfg.PIBBCfg.stop_learning and self.cfg.PIBBCfg.threshold == iterations:
             self.PIBB_learning_activated = False
 
+            if self.cfg.PPOCfg.start_when_PIBB_stops:
+                self._start_PPO_(RewardObj)
+
             if self.cfg.PIBBCfg.delete_noise_at_stop:
+                print("Noise cleared")
                 learningObj.PIBB.noise_arr.fill_(0)
                 learningObj.PIBB.policy.mn.apply_noise_tensor(learningObj.PIBB.noise_arr)
 
@@ -163,16 +170,16 @@ class AlgorithmCurriculum:
             else:
                 self.count_increase_gamma += 1
 
-    def get_curriculum_action(self, PPO, PIBB, observations):
+    def get_curriculum_action(self, PPO, PIBB, observations, expert_obs):
         actions = None
 
         if self.PIBB_activated:
-            actions_CPG = PIBB.act(observations) * 1.
+            actions_CPG = PIBB.act(observations, expert_obs) * 1.
 
             actions = actions_CPG
 
         if self.PPO_activated:
-            actions_PPO = PPO.act(observations, actions_mult=1.)
+            actions_PPO = PPO.act(observations, expert_obs, actions_mult=1.)
 
             # Scale the output to be [-2, 2]
             for i in range(len(actions_PPO)):
@@ -207,9 +214,9 @@ class AlgorithmCurriculum:
 
         return information_Actor_critic
 
-    def post_step_simulation(self, obs, actions, reward, dones, info, PPO, PIBB):
+    def post_step_simulation(self, obs, exp_obs, actions, reward, dones, info, PPO, PIBB):
         if self.PIBB_learning_activated:
-            PIBB.post_step_simulation(obs, actions, reward, dones, info, False)
+            PIBB.post_step_simulation(obs, exp_obs, actions, reward, dones, info, False)
 
         if self.PPO_learning_activated:
             reward_PPO = reward * self.mult_PPO_rw
@@ -217,14 +224,14 @@ class AlgorithmCurriculum:
             if self.cfg.PPOCfg.scale_rw:
                 reward_PPO *= self.gamma
 
-            PPO.post_step_simulation(obs, actions, reward_PPO, dones, info, False)
+            PPO.post_step_simulation(obs, exp_obs, actions, reward_PPO, dones, info, False)
 
-    def last_step_learning(self, obs, PIBB, PPO):
+    def last_step_learning(self, obs, exp_obs, PIBB, PPO):
         if self.PIBB_learning_activated:
-            PIBB.last_step(obs)
+            PIBB.last_step(obs, exp_obs)
 
         if self.PPO_learning_activated:
-            PPO.last_step(obs)
+            PPO.last_step(obs, exp_obs)
 
 class TerrainCurriculum:
     def __init__(self, num_env, device, cfg: TerrainCurrCfg) -> None:
@@ -321,19 +328,19 @@ class Curriculum:
 
         return None
 
-    def last_step(self, obs, PPO, PIBB):
+    def last_step(self, obs, exp_obs, PPO, PIBB):
         if not(self.algorithm_curriculum is None):
-            self.algorithm_curriculum.last_step_learning(obs, PIBB, PPO)
+            self.algorithm_curriculum.last_step_learning(obs, exp_obs, PIBB, PPO)
 
-    def act_curriculum(self, observation, PPO, PIBB):
+    def act_curriculum(self, observation, expert_obs, PPO, PIBB):
         if not(self.algorithm_curriculum is None):
-            return self.algorithm_curriculum.get_curriculum_action(PPO, PIBB, observation)
+            return self.algorithm_curriculum.get_curriculum_action(PPO, PIBB, observation, expert_obs)
 
         return None
 
-    def post_step_simulation(self, obs, actions, reward, dones, info, PPO, PIBB):
+    def post_step_simulation(self, obs, exp_obs, actions, reward, dones, info, PPO, PIBB):
         if not(self.algorithm_curriculum is None):
-            self.algorithm_curriculum.post_step_simulation(obs, actions, reward, dones, info, PPO, PIBB)
+            self.algorithm_curriculum.post_step_simulation(obs, exp_obs, actions, reward, dones, info, PPO, PIBB)
 
     def set_control_parameters(self, iterations, reward, distance, RwObj, AlgObj):
         if not(self.terrain_curriculum is None):

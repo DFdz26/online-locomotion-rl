@@ -24,6 +24,8 @@ class Runner:
         self.curricula = curricula
         self.num_actions = num_actions
         self.num_observations = 1
+        self.num_observation_sensor = 1
+        self.num_expert_observation = 1
         self.best_distance = True
 
         self.n_steps = 0
@@ -34,11 +36,10 @@ class Runner:
         self.logger.set_robot_name(self.agents.get_asset_name())
         self.logger.store_reward_param(self.rewards.reward_terms)
 
-        self.obs, self.closed_simulation = self.agents.reset_simulation()
+        self.obs, self.obs_exp, self.closed_simulation = self.agents.reset_simulation()
 
         if store_observations:
-            obs = self.obs
-            self.num_observations = int(obs.size()[1])
+            self.num_observations, self.num_observation_sensor, self.num_expert_observation = self.agents.get_num_observations()
 
     def _learning_process_(self, iteration, rewards):
         now_time = time.time()
@@ -68,7 +69,7 @@ class Runner:
 
         closed_simulation = False
         self.starting_training_time = time.time()
-        self.learning_algorithm.prepare_training(self.agents, steps_per_iteration, self.num_observations,
+        self.learning_algorithm.prepare_training(self.agents, steps_per_iteration, self.num_observation_sensor, self.num_expert_observation,
                                                  self.num_actions, self.policy)
 
         for i in range(iterations):
@@ -76,10 +77,10 @@ class Runner:
 
             for step in range(steps_per_iteration):
                 
-                actions = self.learning_algorithm.act(self.obs)
+                actions = self.learning_algorithm.act(self.obs, self.obs_exp)
 
-                self.obs, actions, reward, dones, info, closed_simulation = self.agents.step(None, actions)
-                self.learning_algorithm.post_step_simulation(self.obs, actions, reward * 0.5, dones, info, closed_simulation)
+                self.obs, self.obs_exp, actions, reward, dones, info, closed_simulation = self.agents.step(None, actions)
+                self.learning_algorithm.post_step_simulation(self.obs, self.obs_exp, actions, reward * 0.5, dones, info, closed_simulation)
 
                 if closed_simulation or torch.all(dones > 0):
                     break
@@ -89,7 +90,7 @@ class Runner:
             
             final_reward = self.agents.compute_final_reward()
             rewards = final_reward * 0.5
-            self.learning_algorithm.last_step(self.obs)
+            self.learning_algorithm.last_step(self.obs, self.obs_exp)
 
             self._learning_process_(i, rewards)
 
@@ -101,7 +102,7 @@ class Runner:
                 # Reset the environments, the reward buffers and get the first observation
                 self.rewards.clean_buffers()
                 self.agents.reset_all_envs()
-                self.obs = self.agents.create_observations()
+                self.obs, self.obs_exp = self.agents.create_observations()
 
     def test_agent(self, iterations, steps_per_iteration):
         closed_simulation = False
@@ -112,9 +113,9 @@ class Runner:
 
             for step in range(steps_per_iteration):
 
-                actions = self.learning_algorithm.act(self.obs)
+                actions = self.learning_algorithm.act(self.obs, self.obs_exp)
 
-                _, _, _, dones, _, closed_simulation = self.agents.step(None, actions)
+                self.obs, self.obs_exp, _, _, dones, _, closed_simulation = self.agents.step(None, actions)
 
                 if closed_simulation or torch.all(dones > 0):
                     break
@@ -125,3 +126,5 @@ class Runner:
             if (i + 1) != iterations:
                 # Reset the environments
                 self.agents.reset_all_envs()
+                self.obs, self.obs_exp = self.agents.create_observations()
+

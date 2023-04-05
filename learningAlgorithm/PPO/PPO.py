@@ -67,12 +67,12 @@ class PPO:
 
         self.learning_rate = PPOArgs.learning_rate
 
-    def prepare_training(self, env_class, steps_per_iteration, num_observations, num_actions, policy):
-        self.init_memory(env_class.num_envs, steps_per_iteration, num_observations, num_actions)
+    def prepare_training(self, env_class, steps_per_iteration, num_observations, expert_obs, num_actions, policy):
+        self.init_memory(env_class.num_envs, steps_per_iteration, num_observations, expert_obs, num_actions)
         self.train_mode()
 
-    def init_memory(self, num_envs, num_step_simulations_per_env, actor_obs_shape, action_shape):
-        self.memory = Memory(num_envs, num_step_simulations_per_env, action_shape, actor_obs_shape, self.device)
+    def init_memory(self, num_envs, num_step_simulations_per_env, actor_obs_shape, expert_obs, action_shape):
+        self.memory = Memory(num_envs, num_step_simulations_per_env, action_shape, actor_obs_shape, expert_obs, self.device)
 
     def test_mode(self):
         self.actor_critic.test()
@@ -80,15 +80,16 @@ class PPO:
     def train_mode(self):
         self.actor_critic.train()
 
-    def act(self, observation, actions_mult=1.):
-        self.step_simulation.actions = self.actor_critic.act(observation).detach()
-        self.step_simulation.values = self.actor_critic.evaluate(observation).detach()
+    def act(self, observation, observation_expert, actions_mult=1.):
+        self.step_simulation.actions = self.actor_critic.act(observation, observation_expert).detach()
+        self.step_simulation.values = self.actor_critic.evaluate(observation, observation_expert).detach()
         self.step_simulation.actions_log_prob = self.actor_critic.get_actions_log_prob(
             self.step_simulation.actions).detach()
         self.step_simulation.action_mean = self.actor_critic.action_mean.detach()
         self.step_simulation.action_sigma = self.actor_critic.action_std.detach()
 
         self.step_simulation.observations = observation
+        self.step_simulation.observation_expert = observation_expert
         self.step_simulation.critic_observations = observation
 
         if actions_mult != 1.0:
@@ -96,7 +97,7 @@ class PPO:
 
         return self.step_simulation.actions
 
-    def post_step_simulation(self, obs, actions, reward, dones, info, closed_simulation):
+    def post_step_simulation(self, obs, exp_obs, actions, reward, dones, info, closed_simulation):
         if info is None:
             info = []
 
@@ -116,8 +117,8 @@ class PPO:
         self.step_simulation.clear()
         self.actor_critic.reset()
 
-    def last_step(self, last_critic_obs):
-        last_values = self.actor_critic.evaluate(last_critic_obs).detach()
+    def last_step(self, last_critic_obs, exp_obs):
+        last_values = self.actor_critic.evaluate(last_critic_obs, exp_obs).detach()
         self.memory.compute_returns(last_values, PPOArgs.gamma, PPOArgs.lam)
 
     @staticmethod
@@ -141,13 +142,13 @@ class PPO:
         lr_mean_tot = 0
         mean_loss = 0
 
-        for obs_batch, critic_obs_batch, actions_batch, target_values_batch, advantages_batch, \
+        for obs_batch, expert_obs, critic_obs_batch, actions_batch, target_values_batch, advantages_batch, \
             returns_batch, old_actions_log_prob_batch, old_mu_batch, \
             old_sigma_batch in self.memory.mini_batch_generator(PPOArgs.num_mini_batches, PPOArgs.num_learning_epochs):
 
-            self.actor_critic.act(obs_batch)
+            self.actor_critic.act(obs_batch, expert_obs)
             actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
-            value_batch = self.actor_critic.evaluate(critic_obs_batch)
+            value_batch = self.actor_critic.evaluate(critic_obs_batch, expert_obs)
             mu_batch = self.actor_critic.action_mean
             sigma_batch = self.actor_critic.action_std
             entropy_batch = self.actor_critic.entropy

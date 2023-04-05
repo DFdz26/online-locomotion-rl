@@ -118,17 +118,17 @@ class PIBB(object):
         self.variance *= self.decay
         self.genere_noise_arr()
 
-    def prepare_training(self, agents, steps_per_iteration, num_observation, num_actions, policy):
+    def prepare_training(self, agents, steps_per_iteration, num_observation, expert_obs, num_actions, policy):
         policy.mn.apply_noise_tensor(self.get_noise())
         self.policy = policy
 
     @staticmethod
-    def post_step_simulation(obs, actions, reward, dones, info, closed_simulation):
+    def post_step_simulation(obs, exp_obs, actions, reward, dones, info, closed_simulation):
         pass
 
-    def last_step(self, obs):
+    def last_step(self, obs, exp_obs):
         pass
 
-    def act(self, obs):
+    def act(self, obs, obs_exp):
         return self.policy.forward(obs)
 

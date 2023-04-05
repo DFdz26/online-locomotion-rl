@@ -31,12 +31,13 @@ graph_name = "graph_minicheeta_learning"
 # config_file = "models/configs/config_b1.json"
 # graph_name = "graph_b1_learning"
 
-SAVE_DATA = True
+SAVE_DATA = False
 LOAD_CACHE = True
 TERRAIN_CURRICULUM = True
 rollouts = 50
 num_env_colums = 10
 start_PPO_acting_iteration = 350
+device = "cuda:0"
 
 
 def config_learning_curriculum():
@@ -61,16 +62,16 @@ def config_terrain(env_config):
         },
         {
             "terrain": "random_uniform_terrain",
-            "min_height": -0.1,
-            "max_height": 0.1,
-            "step": 0.1,
+            "min_height": -0.075,
+            "max_height": 0.05,
+            "step": 0.025,
             "downsampled_scale": 0.5
         },
         {
             "terrain": "random_uniform_terrain",
-            "min_height": -0.15,
-            "max_height": 0.15,
-            "step": 0.15,
+            "min_height": -0.1,
+            "max_height": 0.075,
+            "step": 0.025,
             "downsampled_scale": 0.5
         }
     ]
@@ -83,13 +84,13 @@ def config_terrain(env_config):
     y = terrain_com_conf.border_y * 2 + env_config.spacing_env_x * math.ceil(rollouts/num_env_colums) + 1
     terrain_com_conf.columns = math.ceil(x/terrain_com_conf.terrain_length)
     terrain_com_conf.terrain_width = y
-    terrain_obj = Terrain(list_terrains, terrain_com_conf)
+    terrain_obj = Terrain(device, rollouts, list_terrains, terrain_com_conf)
 
     if TERRAIN_CURRICULUM:
         curriculum_terr = TerrainCurrCfg()
 
         curriculum_terr.object = terrain_obj
-        curriculum_terr.Control.threshold = [450, 750, 1000, 1200]
+        curriculum_terr.Control.threshold = [450, 1050, 2050]
         curriculum_terr.percentage_step = 0.35
     else:
         curriculum_terr = None
@@ -273,25 +274,33 @@ cpg_rbf_nn = CPGRBFN(config, dimensions=rollouts, load_cache=LOAD_CACHE)
 n_out = cpg_rbf_nn.get_n_outputs()
 print(f"n_out: {n_out}")
 
+latent_space_size = 12
+
 actorArgs = NNCreatorArgs()
 # actorArgs.inputs = [39]
-actorArgs.inputs = [45]
+actorArgs.inputs = [45 + latent_space_size]
 # actorArgs.hidden_dim = [128, 64]
 actorArgs.hidden_dim = [256, 128]
 actorArgs.outputs = [n_out]
 
 criticArgs = NNCreatorArgs()
-criticArgs.inputs = [45]
+criticArgs.inputs = [45 + latent_space_size]
 # criticArgs.hidden_dim = [128, 64]
 criticArgs.hidden_dim = [256, 128]
 criticArgs.outputs = [1]
 
+expertArgs = NNCreatorArgs()
+expertArgs.inputs = [3]
+# criticArgs.hidden_dim = [128, 64]
+expertArgs.hidden_dim = [6]
+expertArgs.outputs = [latent_space_size]
+
 actor_std_noise = 1.
 
-actorCritic = ActorCritic(actorArgs, criticArgs, actor_std_noise, debug_mess=True)
-ppo = PPO(actorCritic, device="cuda:0", verbose=True)
+actorCritic = ActorCritic(actorArgs, criticArgs, actor_std_noise, expertArgs, debug_mess=True)
+ppo = PPO(actorCritic, device=device, verbose=True)
 
-reward_obj = Rewards(rollouts, "cuda:0", reward_list, 0.999999, step_env, discrete_rewards=True)
+reward_obj = Rewards(rollouts, device, reward_list, 0.999999, step_env, discrete_rewards=True)
 pibb = PIBB(rollouts, h, 1, n_kernels*n_out, decay, variance, device="cuda:0", boost_noise=noise_boost)
 logger = Logger(save=SAVE_DATA, frequency=300, PIBB_param=pibb.get_hyper_parameters(), nn_config=config)
 env_config = EnvConfig()
@@ -299,7 +308,7 @@ env_config = EnvConfig()
 config_env()
 terrain_obj, terrain_curr = config_terrain(env_config)
 alg_curr = config_learning_curriculum()
-curricula = Curriculum(rollouts, device="cuda:0", terrain_config=terrain_curr, algorithm_config=alg_curr)
+curricula = Curriculum(rollouts, device=device, terrain_config=terrain_curr, algorithm_config=alg_curr)
 logged = False
 
 learning_algorithm = PPO_PIBB(ppo, pibb, curricula)

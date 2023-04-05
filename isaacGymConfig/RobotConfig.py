@@ -54,6 +54,9 @@ class RobotConfig(BaseConfiguration):
         self.rep = 0
         self.n_step = 0
         self.curricula = curricula
+        self.num_observations = 0
+        self.num_observations_sensors = 0
+        self.num_expert_observations = 0
 
         self.rewards = rewards
         self.config_intial_position = [self.cfg["asset_options"]["initial_postion"][axis]
@@ -448,12 +451,12 @@ class RobotConfig(BaseConfiguration):
     def reset_simulation(self):
         self.reset_all_envs()
 
-        obs, _, _, _, _, closed_simulation = self.step(
+        obs, obs_expert, _, _, _, _, closed_simulation = self.step(
             None,
             torch.zeros(self.num_envs, self.num_dof, device=self.device, requires_grad=False)
         )
 
-        return obs, closed_simulation
+        return obs, obs_expert, closed_simulation
 
     def step(self, test_data=None, actions=None, position_control=True, iterations_without_control=1):
 
@@ -475,11 +478,11 @@ class RobotConfig(BaseConfiguration):
                 self._refresh_gym_tensors_()
             self.post_step()
 
-            obs = self.create_observations()
+            obs, obs_expert = self.create_observations()
             dones = self.finished
             info = None
 
-        return obs, self.actions, self.reward, dones, info, closed_simulation
+        return obs, obs_expert, self.actions, self.reward, dones, info, closed_simulation
 
     def compute_graphics(self):
         ending = self.gym.query_viewer_has_closed(self.viewer)
@@ -496,6 +499,9 @@ class RobotConfig(BaseConfiguration):
             self.gym.sync_frame_time(self.sim)
 
         return ending
+    
+    def get_num_observations(self):
+        return self.num_observations, self.num_observations_sensors, self.num_expert_observations
 
     def create_observations(self):
         # obs = torch.cat((
@@ -516,7 +522,20 @@ class RobotConfig(BaseConfiguration):
             dim=-1
         )
 
-        return {"sensor": obs, "expert": None}
+        
+
+        # expert = torch.cat((
+        #     torch.zeros(self.num_envs, 12, dtype=torch.float, device=self.device, requires_grad=False)),
+        #     dim=-1
+        # )
+
+        expert = self.terrain_config.get_info_terrain(self.base_pos)
+
+        self.num_observations_sensors = obs.size()[1]
+        self.num_expert_observations = expert.size()[1]
+        self.num_observations = self.num_observations_sensors + self.num_expert_observations
+
+        return obs, expert
 
     def __create_camera(self):
         viewer = self.gym.create_viewer(self.sim, gymapi.CameraProperties())

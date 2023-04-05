@@ -5,6 +5,7 @@ class Memory:
     class Step:
         def __init__(self):
             self.observations = None
+            self.observation_expert = None
             self.actions = None
             self.critic_observations = None
             self.values = None
@@ -19,7 +20,8 @@ class Memory:
         def clear(self):
             self.__init__()
 
-    def __init__(self, num_envs, num_step_per_env, actions_shape, observation_shape, device='cpu'):
+    def __init__(self, num_envs, num_step_per_env, actions_shape, observation_shape, expert_observation_shape,
+                 device='cpu'):
         self.num_step_per_env = num_step_per_env
         self.num_envs = num_envs
 
@@ -30,6 +32,8 @@ class Memory:
 
         # Simulation memory
         self.observations = torch.zeros(num_step_per_env, num_envs, observation_shape, device=self.device,
+                                        requires_grad=False)
+        self.observation_expert = torch.zeros(num_step_per_env, num_envs, expert_observation_shape, device=self.device,
                                         requires_grad=False)
         self.rewards = torch.zeros(num_step_per_env, num_envs, 1, device=self.device, requires_grad=False)
         self.actions = torch.zeros(num_step_per_env, num_envs, actions_shape, device=self.device, requires_grad=False)
@@ -48,6 +52,7 @@ class Memory:
             raise AssertionError("Rollout buffer overflow")
 
         self.observations[self.step].copy_(step.observations)
+        self.observation_expert[self.step].copy_(step.observation_expert)
         self.dones[self.step].copy_(step.dones.view(-1, 1))
         self.actions[self.step].copy_(step.actions)
         self.rewards[self.step].copy_(step.rewards.view(-1, 1))
@@ -85,6 +90,7 @@ class Memory:
         indices = torch.randperm(num_mini_batches * mini_batch_size, requires_grad=False, device=self.device)
 
         observations = self.observations.flatten(0, 1)
+        expert_observations = self.observation_expert.flatten(0, 1)
         critic_observations = observations
 
         actions = self.actions.flatten(0, 1)
@@ -102,6 +108,7 @@ class Memory:
                 batch_idx = indices[start:end]
 
                 obs_batch = observations[batch_idx]
+                expert_obs = expert_observations[batch_idx]
                 critic_observations_batch = critic_observations[batch_idx]
                 actions_batch = actions[batch_idx]
                 target_values_batch = values[batch_idx]
@@ -110,5 +117,5 @@ class Memory:
                 advantages_batch = advantages[batch_idx]
                 old_mu_batch = old_mu[batch_idx]
                 old_sigma_batch = old_sigma[batch_idx]
-                yield obs_batch, critic_observations_batch, actions_batch, target_values_batch, advantages_batch, \
+                yield obs_batch, expert_obs, critic_observations_batch, actions_batch, target_values_batch, advantages_batch, \
                     returns_batch, old_actions_log_prob_batch, old_mu_batch, old_sigma_batch

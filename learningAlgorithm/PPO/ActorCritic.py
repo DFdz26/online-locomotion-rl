@@ -39,6 +39,7 @@ class ActorCritic(nn.Module):
         if self.debug_mess:
             print(f"Actor MLP: {self.actor_NN}")
             print(f"Critic MLP: {self.critic_NN}")
+            print(f"Expert MLP: {self.expert_NN}")
 
         # Action noise
         self.std = nn.Parameter(actor_std_noise * torch.ones(actorArgs.outputs[0]))
@@ -71,21 +72,21 @@ class ActorCritic(nn.Module):
     def entropy(self):
         return self.distribution.entropy().sum(dim=-1)
 
-    def update_distribution(self, observations):
-        selected_action = self.actor_NN(observations)
+    def update_distribution(self, observations, expert_observations):
+        latent_space = self.expert_NN(expert_observations)
+        selected_action = self.actor_NN(torch.cat((observations, latent_space), dim=-1))
         self.distribution = Normal(selected_action, self.std)
 
-    def act(self, observations):
-        sensor_observations = observations["sensor"]
-        expert_observations = observations["expert"]
-        self.update_distribution(sensor_observations)
+    def act(self, observations, expert_observations):
+        self.update_distribution(observations, expert_observations)
         return self.distribution.sample()
 
     def get_actions_log_prob(self, actions):
         return self.distribution.log_prob(actions).sum(dim=-1)
 
-    def evaluate(self, critic_observations):
-        return self.critic_NN(critic_observations)
+    def evaluate(self, critic_observations, exp_obs):
+        latent_space = self.expert_NN(exp_obs)
+        return self.critic_NN(torch.cat((critic_observations, latent_space), dim=-1))
 
     def __default_values_kwargs__(self):
         self.debug_mess = False
