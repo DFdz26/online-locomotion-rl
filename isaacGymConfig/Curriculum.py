@@ -10,6 +10,7 @@ Curriculum
 import numpy as np
 import torch
 from typing import NewType
+import math
 
 from isaacgym import terrain_utils
 from isaacgym import gymapi
@@ -138,24 +139,27 @@ class AlgorithmCurriculum:
 
         RewardObj.change_rewards(rw_weights)
 
-    def _start_PPO_(self, RewardObj):
+    def _start_PPO_(self, RewardObj, steps_per_iteration):
         self.PPO_activated = True
         self.PPO_learning_activated = True
+        steps_per_iteration = int(math.floor(steps_per_iteration/1.5))
 
         if self.cfg.PPOCfg.change_RW_scales:
             self._change_RW_scales_(RewardObj)
 
-    def set_control_parameters(self, iterations, reward, distance, RewardObj, learningObj):
+        return steps_per_iteration
+
+    def set_control_parameters(self, iterations, reward, distance, RewardObj, learningObj, steps_per_iteration):
         self.iteration = iterations
 
         if 0 < self.cfg.PPOCfg.start_iteration_learning == iterations:
-            self._start_PPO_(RewardObj)
+            steps_per_iteration = self._start_PPO_(RewardObj, steps_per_iteration)
 
         if self.cfg.PIBBCfg.stop_learning and self.cfg.PIBBCfg.threshold == iterations:
             self.PIBB_learning_activated = False
 
-            if self.cfg.PPOCfg.start_when_PIBB_stops:
-                self._start_PPO_(RewardObj)
+            if self.cfg.PPOCfg.start_when_PIBB_stops and not self.PPO_activated:
+                steps_per_iteration = self._start_PPO_(RewardObj, steps_per_iteration)
 
             if self.cfg.PIBBCfg.delete_noise_at_stop:
                 print("Noise cleared")
@@ -169,6 +173,8 @@ class AlgorithmCurriculum:
                 self.count_increase_gamma = 0
             else:
                 self.count_increase_gamma += 1
+
+        return steps_per_iteration
 
     def get_curriculum_action(self, PPO, PIBB, observations, expert_obs):
         actions = None
@@ -342,7 +348,9 @@ class Curriculum:
         if not(self.algorithm_curriculum is None):
             self.algorithm_curriculum.post_step_simulation(obs, exp_obs, actions, reward, dones, info, PPO, PIBB)
 
-    def set_control_parameters(self, iterations, reward, distance, RwObj, AlgObj):
+    def set_control_parameters(self, iterations, reward, distance, RwObj, AlgObj, steps_per_iteration):
+        new_steps_per_iteration = steps_per_iteration
+
         if not(self.terrain_curriculum is None):
             self.terrain_curriculum.set_control_parameters(iterations, reward)
 
@@ -350,7 +358,9 @@ class Curriculum:
             self.randomization_curriculum.set_control_parameters(iterations, reward)
 
         if not(self.algorithm_curriculum is None):
-            self.algorithm_curriculum.set_control_parameters(iterations, reward, distance, RwObj, AlgObj)
+            new_steps_per_iteration = self.algorithm_curriculum.set_control_parameters(iterations, reward, distance, RwObj, AlgObj, new_steps_per_iteration)
+
+        return new_steps_per_iteration
 
     def get_terrain_curriculum(self, initial_positions):
         if self.terrain_curriculum is None:

@@ -22,9 +22,9 @@ class PPOArgs:
     clip_param = 0.2
     entropy_coef = 0.0008
     num_learning_epochs = 5
-    num_mini_batches = 400  # mini batch size = num_envs*nsteps / nminibatches
+    num_mini_batches = 300  # mini batch size = num_envs*nsteps / nminibatches 400
     # num_mini_batches = 400  # mini batch size = num_envs*nsteps / nminibatches
-    learning_rate = 0.0000003  # 5.e-4
+    learning_rate = 0.0000002  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000015  # 5.e-4
     schedule = 'fixed'  # could be adaptive, fixed
     # schedule = 'adaptive'  # could be adaptive, fixed

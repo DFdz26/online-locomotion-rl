@@ -31,11 +31,12 @@ graph_name = "graph_minicheeta_learning"
 # config_file = "models/configs/config_b1.json"
 # graph_name = "graph_b1_learning"
 
-SAVE_DATA = False
+SAVE_DATA = True
 LOAD_CACHE = True
 TERRAIN_CURRICULUM = True
 rollouts = 50
 num_env_colums = 10
+learning_rate_PPO = 0.0000002  # 0.0000003
 start_PPO_acting_iteration = 350
 device = "cuda:0"
 
@@ -43,6 +44,8 @@ device = "cuda:0"
 def config_learning_curriculum():
     algCfg = AlgorithmCurrCfg()
     algCfg.PIBBCfg.threshold = start_PPO_acting_iteration
+    algCfg.PPOCfg.gamma = 0.2
+    algCfg.PPOCfg.change_RW_scales = True
 
     return algCfg
 
@@ -172,7 +175,7 @@ reward_list = {
         "weight": 0.1,
         "reward_data": {
             "exponential": False,
-            "weight": -0.23
+            "weight": -0.24
         }
     },
 
@@ -180,7 +183,7 @@ reward_list = {
         "weight": 0.077,
         "reward_data": {
             "exponential": False,
-            "weight": -0.1
+            "weight": -0.15
         }
     },
 
@@ -197,7 +200,7 @@ reward_list = {
         "weight": 0.1,
         "reward_data": {
             "exponential": False,
-            "weight": -0.05
+            "weight": -0.075  # 0.05
         }
     },
     
@@ -205,12 +208,12 @@ reward_list = {
         "weight": 1.,
         "reward_data": {
             "exponential": False,
-            "weight": 0.177
+            "weight": 0.178  # 0.177
         }
     },
 
     "vel_cont" : {
-        "weight": 0.25,
+        "weight": 0.30, # 0.25
     },
 
 }
