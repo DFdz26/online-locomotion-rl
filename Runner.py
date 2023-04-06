@@ -1,3 +1,4 @@
+import math
 import time
 
 from isaacgym import gymapi
@@ -14,6 +15,8 @@ from isaacGymConfig.Curriculum import Curriculum
 
 
 class Runner:
+    curricula: Curriculum
+
     def __init__(self, policy, learning_algorithm, logger: Logger, config_file, env_config, reward: Rewards,
                  num_actions, terrain_config=None, curricula=None, verbose=False, store_observations=False):
         self.agents = RobotConfig(config_file, env_config, reward, terrain_config, curricula, verbose)
@@ -35,6 +38,10 @@ class Runner:
 
         self.logger.set_robot_name(self.agents.get_asset_name())
         self.logger.store_reward_param(self.rewards.reward_terms)
+        self.logger.store_curriculum(self.curricula)
+
+        if hasattr(self.learning_algorithm, "get_info_algorithm"):
+            self.logger.store_algorithm_parameters(self.learning_algorithm.get_info_algorithm(get_PIBB=False))
 
         self.obs, self.obs_exp, self.closed_simulation = self.agents.reset_simulation()
 
@@ -53,24 +60,26 @@ class Runner:
         if not(noise is None):
             noise = noise.detach().clone()
 
-        self.logger.store_data(distance, rewards, self.policy.get_weights(), noise, iteration, total_elapsed_time,
-                               show_plot=True)
+        self.logger.store_data(distance, rewards, self.learning_algorithm.get_weights_policy(), noise, iteration,
+                               total_elapsed_time, show_plot=True)
         loss = self.learning_algorithm.update(self.policy, rewards)
         self.learning_algorithm.print_info(rewards, iteration, total_elapsed_time, elapsed_time_iteration, loss)
 
         # Register the next weights and save
-        self.logger.store_data_post(self.policy.get_weights())
-        self.logger.save_stored_data(actual_weight=self.policy.get_weights(), actual_reward=rewards,
+        self.logger.store_data_post(self.learning_algorithm.get_weights_policy())
+        self.logger.save_stored_data(actual_weight=self.learning_algorithm.get_weights_policy(), actual_reward=rewards,
                                      iteration=iteration, total_time=total_elapsed_time, noise=noise,
                                      index=best_index)
 
     def learn(self, iterations, steps_per_iteration, best_distance=True):
         self.best_distance = best_distance
+        steps_ppo = steps_per_iteration if self.curricula is None else math.ceil(
+            steps_per_iteration/self.curricula.reduce_steps)
 
         closed_simulation = False
         self.starting_training_time = time.time()
-        self.learning_algorithm.prepare_training(self.agents, steps_per_iteration, self.num_observation_sensor, self.num_expert_observation,
-                                                 self.num_actions, self.policy)
+        self.learning_algorithm.prepare_training(self.agents, steps_ppo, self.num_observation_sensor,
+                                                 self.num_expert_observation, self.num_actions, self.policy)
 
         for i in range(iterations):
             self.starting_iteration_time = time.time()
@@ -97,7 +106,9 @@ class Runner:
             if (i + 1) != iterations:
                 # In case of having curriculum, update it
                 if not(self.curricula is None):
-                    steps_per_iteration = self.curricula.set_control_parameters(i, final_reward, None, self.rewards, self.learning_algorithm, steps_per_iteration)
+                    steps_per_iteration = self.curricula.set_control_parameters(i, final_reward, None,
+                                                                                self.rewards, self.learning_algorithm,
+                                                                                steps_per_iteration)
 
                 # Reset the environments, the reward buffers and get the first observation
                 self.rewards.clean_buffers()

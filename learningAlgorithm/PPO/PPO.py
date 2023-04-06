@@ -21,10 +21,10 @@ class PPOArgs:
     value_loss_coef = 15000.
     clip_param = 0.2
     entropy_coef = 0.0008
-    num_learning_epochs = 5
-    num_mini_batches = 300  # mini batch size = num_envs*nsteps / nminibatches 400
+    num_learning_epochs = 3
+    num_mini_batches = 500  # mini batch size = num_envs*nsteps / nminibatches 400
     # num_mini_batches = 400  # mini batch size = num_envs*nsteps / nminibatches
-    learning_rate = 0.0000002  # 5.e-4 and 0.0000003
+    learning_rate = 0.0000003  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000015  # 5.e-4
     schedule = 'fixed'  # could be adaptive, fixed
     # schedule = 'adaptive'  # could be adaptive, fixed
@@ -43,12 +43,12 @@ class PPOArgs:
 
 
 class PPO:
-    actor_critic: ActorCritic
 
-    def __init__(self, actor_critic, device='cpu', verbose=False):
+    def __init__(self, actor_critic: ActorCritic, device='cpu', verbose=False):
 
         self.device = device
         self.verbose = verbose
+        self.cfg = PPOArgs()
 
         # PPO components
         self.actor_critic = actor_critic
@@ -66,6 +66,9 @@ class PPO:
         self.step_simulation = Memory.Step()
 
         self.learning_rate = PPOArgs.learning_rate
+
+    def get_info_algorithm(self, **kwargs):
+        return self.cfg
 
     def prepare_training(self, env_class, steps_per_iteration, num_observations, expert_obs, num_actions, policy):
         self.init_memory(env_class.num_envs, steps_per_iteration, num_observations, expert_obs, num_actions)
@@ -116,6 +119,12 @@ class PPO:
         self.memory.add_steps_into_memory(self.step_simulation)
         self.step_simulation.clear()
         self.actor_critic.reset()
+
+    def get_policy_weights(self):
+        return self.actor_critic.get_weights()
+
+    def load_policy_weights(self, weights):
+        self.actor_critic.load_weights(weights)
 
     def last_step(self, last_critic_obs, exp_obs):
         last_values = self.actor_critic.evaluate(last_critic_obs, exp_obs).detach()

@@ -34,7 +34,6 @@ def convert_drive_mode(mode_str):
 
 
 class RobotConfig(BaseConfiguration):
-    # def __init__(self, config_file, env_config, nn, learning_algorithm, logger, rewards, verbose=False):
     def __init__(self, config_file, env_config, rewards, terrain_config=None, curricula=None, verbose=False):
         with open(config_file) as f:
             self.cfg = json.load(f)
@@ -463,6 +462,7 @@ class RobotConfig(BaseConfiguration):
         dones = None
         info = None
         obs = None
+        obs_expert = None
 
         closed_simulation = self.compute_graphics()
         self.previous_dof_vel = self.dof_vel.detach().clone()

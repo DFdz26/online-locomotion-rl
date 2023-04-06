@@ -77,12 +77,14 @@ class AlgorithmCurrCfg:
         step_increase_gamma = 0.1
         iterations_to_increase = 2000
         start_iteration_learning = -999
+        divider_initial_steps = 1.5
 
         start_when_PIBB_stops = True
         activate_increase = False
         stop_learning = False
         scale_rw = True
         change_RW_scales = True
+        start_learning_from_CPG_RBFN = False
 
     class PIBBCfg:
         stop_learning = True
@@ -102,7 +104,7 @@ class AlgorithmCurriculum:
         self.cfg = cfg
         self.device = device
         self.stored_distance = None
-        self.gamma = self.cfg.PPOCfg.gamma
+        self.gamma = 0.
         self.iteration = 0.
         self.count_increase_gamma = 0
 
@@ -120,6 +122,9 @@ class AlgorithmCurriculum:
                                                requires_grad=False)
 
         self._set_up_activated_learning_output_()
+
+    def get_NN_weights(self):
+        return [self.gamma, 1.]
 
     def _set_up_activated_learning_output_(self):
         if not self.cfg.PPOCfg.start_when_PIBB_stops:
@@ -142,7 +147,8 @@ class AlgorithmCurriculum:
     def _start_PPO_(self, RewardObj, steps_per_iteration):
         self.PPO_activated = True
         self.PPO_learning_activated = True
-        steps_per_iteration = int(math.floor(steps_per_iteration/1.5))
+        steps_per_iteration = int(math.floor(steps_per_iteration/self.cfg.PPOCfg.divider_initial_steps))
+        self.gamma = self.cfg.PPOCfg.gamma
 
         if self.cfg.PPOCfg.change_RW_scales:
             self._change_RW_scales_(RewardObj)
@@ -314,8 +320,20 @@ class Curriculum:
         self.algorithm_config = algorithm_config
         self.num_env = num_env
         self.device = device
+        self.reduce_steps = 1.
 
         self._set_curriculums_()
+
+    def get_weights_NN(self):
+        weights = {
+            "PPO": 1.,
+            "PIBB": 1.
+        }
+
+        if not(self.algorithm_curriculum is None):
+            weights["PPO"], weights["PIBB"] = self.algorithm_curriculum.get_NN_weights()
+
+        return weights
 
     def set_initial_positions(self, positions):
         if self.terrain_curriculum is None:
@@ -327,6 +345,9 @@ class Curriculum:
         self.terrain_curriculum = None if self.terrain_config is None else TerrainCurriculum(self.num_env, self.device, self.terrain_config)
         self.algorithm_curriculum = None if self.algorithm_config is None else AlgorithmCurriculum( self.device, self.algorithm_config)
         self.randomization_curriculum = None
+
+        if not(self.algorithm_curriculum is None):
+            self.reduce_steps = self.algorithm_curriculum.cfg.PPOCfg.divider_initial_steps
 
     def update_algorithm(self, policy, rewards, PPO, PIBB):
         if not (self.algorithm_curriculum is None):

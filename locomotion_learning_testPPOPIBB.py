@@ -13,7 +13,7 @@ from modules.cpgrbfn2 import CPGRBFN
 from modules.logger import Logger
 
 from isaacGymConfig.Rewards import Rewards
-from learningAlgorithm.PPO.ActorCritic import ActorCritic 
+from learningAlgorithm.PPO.ActorCritic import ActorCritic
 from learningAlgorithm.PPO.ActorCritic import NNCreatorArgs
 from learningAlgorithm.PPO.PPO import PPO
 
@@ -23,7 +23,6 @@ from learningAlgorithm.CPG_MLP import MLP_CPG
 from learningAlgorithm.CPG_MLP import PPO_PIBB
 from isaacGymConfig.TerrainConfig import Terrain, TerrainComCfg
 from isaacGymConfig.Curriculum import Curriculum, TerrainCurrCfg, AlgorithmCurrCfg
-
 
 config_file = "models/configs/config_minicheeta.json"
 graph_name = "graph_minicheeta_learning"
@@ -51,7 +50,6 @@ def config_learning_curriculum():
 
 
 def config_terrain(env_config):
-
     list_terrains = [
         {
             "terrain": "flat_terrain",
@@ -83,9 +81,9 @@ def config_terrain(env_config):
 
     # Compute the number of needed columns
     aux = num_env_colums if rollouts > num_env_colums else rollouts
-    x = aux * -env_config.spacing_env -terrain_com_conf.border_x*2
-    y = terrain_com_conf.border_y * 2 + env_config.spacing_env_x * math.ceil(rollouts/num_env_colums) + 1
-    terrain_com_conf.columns = math.ceil(x/terrain_com_conf.terrain_length)
+    x = aux * -env_config.spacing_env - terrain_com_conf.border_x * 2
+    y = terrain_com_conf.border_y * 2 + env_config.spacing_env_x * math.ceil(rollouts / num_env_colums) + 1
+    terrain_com_conf.columns = math.ceil(x / terrain_com_conf.terrain_length)
     terrain_com_conf.terrain_width = y
     terrain_obj = Terrain(device, rollouts, list_terrains, terrain_com_conf)
 
@@ -170,7 +168,7 @@ reward_list = {
             "jerk_coef": -0.00002,
         }
     },
-    
+
     "z_vel": {
         "weight": 0.1,
         "reward_data": {
@@ -195,7 +193,7 @@ reward_list = {
             "command": 0.,
         }
     },
-        
+
     "y_velocity": {
         "weight": 0.1,
         "reward_data": {
@@ -203,7 +201,7 @@ reward_list = {
             "weight": -0.075  # 0.05
         }
     },
-    
+
     "x_velocity": {
         "weight": 1.,
         "reward_data": {
@@ -212,13 +210,18 @@ reward_list = {
         }
     },
 
-    "vel_cont" : {
-        "weight": 0.30, # 0.25
+    "vel_cont": {
+        "weight": 0.30,  # 0.25
+    },
+
+    "orthogonal_angle_error": {
+        "weight": 0.1,
+        "reward_data": {
+            "weight": -0.02
+        }
     },
 
 }
-
-
 
 n_kernels = 20
 variance = 0.027
@@ -229,8 +232,8 @@ noise_boost = 1.75
 dt = 0.005
 seconds_iteration = 5
 max_iterations = 99001
-step_env = int(seconds_iteration/dt)
-step_env = int(seconds_iteration/0.01)
+step_env = int(seconds_iteration / dt)
+step_env = int(seconds_iteration / 0.01)
 
 show_final_graph = True
 
@@ -258,7 +261,6 @@ cpg_utils = {
     "STEPS_INIT": 250,
     "SHOW_GRAPHIC": False,
 }
-
 
 rbf_param = {
     "SIGMA": 0.04,
@@ -304,7 +306,7 @@ actorCritic = ActorCritic(actorArgs, criticArgs, actor_std_noise, expertArgs, de
 ppo = PPO(actorCritic, device=device, verbose=True)
 
 reward_obj = Rewards(rollouts, device, reward_list, 0.999999, step_env, discrete_rewards=True)
-pibb = PIBB(rollouts, h, 1, n_kernels*n_out, decay, variance, device="cuda:0", boost_noise=noise_boost)
+pibb = PIBB(rollouts, h, 1, n_kernels * n_out, decay, variance, device="cuda:0", boost_noise=noise_boost)
 logger = Logger(save=SAVE_DATA, frequency=300, PIBB_param=pibb.get_hyper_parameters(), nn_config=config)
 env_config = EnvConfig()
 

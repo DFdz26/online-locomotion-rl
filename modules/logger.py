@@ -61,6 +61,8 @@ class Logger:
 
         self.frequency = frequency
         self.frequency_plot = frequency_plot
+        self.curriculum = None
+        self.algorithm_parameters = None
 
         self.stored_info = {
             "max_reward": DataStore(),
@@ -101,6 +103,22 @@ class Logger:
             nn_info = json.load(f)
 
         return nn_info
+
+    def recover_curriculum(self, filename):
+        self.folder = os.path.dirname(filename)
+
+        with open(os.path.join(self.folder, "curriculum.pickle"), 'rb') as f:
+            curriculum = pickle.load(f)
+
+        return curriculum
+
+    def recover_algorithm_parameters(self, filename):
+        self.folder = os.path.dirname(filename)
+
+        with open(os.path.join(self.folder, "algorithm_param.pickle"), 'rb') as f:
+            algorithm_param = pickle.load(f)
+
+        return algorithm_param
 
     def recover_data_class(self, filename):
         self.filename = filename
@@ -244,6 +262,12 @@ class Logger:
             if self.renew_data[k]:
                 self.renew_data[k] = self.stored_info[k].store_weights_post(weights)
 
+    def store_curriculum(self, curriculum):
+        self.curriculum = curriculum
+
+    def store_algorithm_parameters(self, algorithm_parameters):
+        self.algorithm_parameters = algorithm_parameters
+
     def store_reward_param(self, reward_params):
         self.rewards_weights = reward_params
 
@@ -258,6 +282,22 @@ class Logger:
             json.dump(self.PIBB_param, f, indent=2)
 
         self.PIBB_param = None
+
+    def __save_curriculum(self):
+        import pickle
+
+        with open(os.path.join(self.folder, "curriculum.pickle"), "wb") as f:
+            pickle.dump(self.curriculum, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        self.curriculum = None
+
+    def __save_algorithm_parameters(self):
+        import pickle
+
+        with open(os.path.join(self.folder, "algorithm_parameters.pickle"), "wb") as f:
+            pickle.dump(self.algorithm_parameters, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        self.algorithm_parameters = None
 
     def __save_rewards_param(self):
         with open(os.path.join(self.folder, "rewards_param.json"), "w") as f:
@@ -282,6 +322,12 @@ class Logger:
 
         if not (self.PIBB_param is None):
             self.__save_PIBB_param()
+
+        if not (self.curriculum is None):
+            self.__save_curriculum()
+
+        if not (self.algorithm_parameters is None):
+            self.__save_algorithm_parameters()
 
         if not (self.rewards_weights is None):
             self.__save_rewards_param()

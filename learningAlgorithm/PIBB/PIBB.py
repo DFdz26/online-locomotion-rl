@@ -31,6 +31,12 @@ class PIBB(object):
     def get_h(self):
         return self.h
 
+    def load_policy_weights(self, weights):
+        self.policy.load_weights(weights)
+
+    def get_policy_weights(self):
+        return self.policy.get_weights()
+
     def genere_noise_arr(self, variance=None):
         if variance is None:
             variance = self.variance

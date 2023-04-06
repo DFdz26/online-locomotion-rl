@@ -1,6 +1,9 @@
 import torch
 import pickle
 
+from PPO.PPO import PPO as PPO_class
+from PIBB.PIBB import PIBB as PIBB_class
+
 
 class MLP_CPG:
     def __init__(self, MLP, CPG) -> None:
@@ -25,7 +28,7 @@ class MLP_CPG:
 
 
 class PPO_PIBB:
-    def __init__(self, PPO, PIBB, Curricula, learnt_weights=None, test=False) -> None:
+    def __init__(self, PPO: PPO_class, PIBB: PIBB_class, Curricula, learnt_weights=None, test=False) -> None:
         self.PPO = PPO
         self.PIBB = PIBB
         self.it = 0
@@ -52,6 +55,37 @@ class PPO_PIBB:
             "counter": 0
         }
         self.accum_fitness = 0.
+
+    def read_data_point(self, filename, logger, post=True, recover_MLP=True, recover_CPG=True, test=False):
+        weights, noise, iteration, _, index = logger.recover_data(filename, post)
+
+        MLP_weights = weights[0]
+        CPG_weights = weights[1]
+        combined = weights[2]
+
+        if recover_MLP:
+            self.PPO.load_policy_weights(MLP_weights)
+
+        if recover_CPG:
+            self.PIBB.load_policy_weights(CPG_weights)
+
+        self.learnt_weight = combined
+        self.test = test
+
+    def get_info_algorithm(self, get_PPO=True, get_PIBB=True):
+        PPO_cfg = None
+        PIBB_cfg = None
+
+        if get_PPO:
+            PPO_cfg = self.PPO.cfg
+
+        if get_PIBB:
+            PIBB_cfg = self.PIBB.get_hyper_parameters()
+
+        return [PPO_cfg, PIBB_cfg]
+
+    def get_weights_policy(self):
+        return [self.PPO.get_policy_weights(), self.PIBB.get_policy_weights(), self.curricula.get_weights_NN()]
 
     def update(self, policy, rewards):
         
