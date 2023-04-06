@@ -49,7 +49,7 @@ class MN(torchNet):
     # (private)
 
     def __init__(self, hyperparams, outputgain=None, bias=False, device=None, dimensions=1, load_cache=True,
-                 abs_weights=False):
+                 abs_weights=False, noise_to_zero=False):
 
         # initialize network hyperparameter
         super().__init__(device)
@@ -59,7 +59,7 @@ class MN(torchNet):
         if device is not None:
             self.device = device
         elif torch.cuda.is_available():
-            self.device = torch.device('cuda')
+            self.device = 'cuda:0'
         else:
             self.device = torch.device('cpu')
 
@@ -115,7 +115,11 @@ class MN(torchNet):
             pickle.dump(self.W, f)
 
     def load_weights(self, nw, update_Wn=True):
-        W_init = torch.FloatTensor(nw).to(self.device)
+        print("aaaaaaaaaaaaa")
+        self.device = 'cuda:0'
+        print(nw)
+        print(self.device)
+        W_init = torch.FloatTensor(nw.to('cpu')).to(self.device)
         print(W_init)
         print(self.W.shape)
         self.W = torch.reshape(W_init, self.W.shape)

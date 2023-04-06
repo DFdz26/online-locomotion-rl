@@ -522,14 +522,20 @@ class RobotConfig(BaseConfiguration):
             dim=-1
         )
 
-        
-
         # expert = torch.cat((
         #     torch.zeros(self.num_envs, 12, dtype=torch.float, device=self.device, requires_grad=False)),
         #     dim=-1
         # )
 
-        expert = self.terrain_config.get_info_terrain(self.base_pos)
+        in_contact = (torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1) > 1.).to(torch.float32)
+
+        # expert = torch.cat((
+        #     self.terrain_config.get_info_terrain(self.base_pos),
+        #     in_contact),
+        #     dim=-1
+        # )
+
+        expert = in_contact
 
         self.num_observations_sensors = obs.size()[1]
         self.num_expert_observations = expert.size()[1]

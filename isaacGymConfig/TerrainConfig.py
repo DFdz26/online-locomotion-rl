@@ -226,6 +226,7 @@ class Terrain:
         tm_params.nb_triangles = triangles.shape[0]
         
         # tm_params.transform.r = gymapi.Quat(0., 0., 0., 0.)
+        tm_params.transform.r = gymapi.Quat(0, 0.0, 0.0, 1)
         tm_params.transform.p.x = self.config.border_x
         tm_params.transform.p.y = self.config.border_y - self.config.terrain_length * self.config.columns
 

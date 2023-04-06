@@ -21,14 +21,17 @@ class PPOArgs:
     value_loss_coef = 15000.
     clip_param = 0.2
     entropy_coef = 0.0008
-    num_learning_epochs = 3
-    num_mini_batches = 500  # mini batch size = num_envs*nsteps / nminibatches 400
+    num_learning_epochs = 2  # 5
+    num_mini_batches = 1400  # mini batch size = num_envs*nsteps / nminibatches 400
     # num_mini_batches = 400  # mini batch size = num_envs*nsteps / nminibatches
-    learning_rate = 0.0000003  # 5.e-4 and 0.0000003
+    # learning_rate = 0.0000003  # 5.e-4 and 0.0000003
+    # learning_rate = 0.00000012  # 5.e-4 and 0.0000003
+    learning_rate = 0.000000032  # 5.e-4 and 0.0000003
+    # learning_rate = 0.000000012  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000015  # 5.e-4
     schedule = 'fixed'  # could be adaptive, fixed
     # schedule = 'adaptive'  # could be adaptive, fixed
-    gamma = 0.99
+    gamma = 0.996
     lam = 0.95
     # desired_kl = 0.01
     desired_kl = 0.01
@@ -44,7 +47,7 @@ class PPOArgs:
 
 class PPO:
 
-    def __init__(self, actor_critic: ActorCritic, device='cpu', verbose=False):
+    def __init__(self, actor_critic: ActorCritic, device='cpu', verbose=False, loading=False):
 
         self.device = device
         self.verbose = verbose
@@ -52,17 +55,21 @@ class PPO:
 
         # PPO components
         self.actor_critic = actor_critic
+        self.optimizer = None
 
-        if self.verbose:
-            print(f"Copying actorCritic to {device} ...", end='  ')
+        if not loading:
+            if self.verbose:
+                print(f"Copying actorCritic to {device} ...", end='  ')
 
-        self.actor_critic.to(device)
+            self.actor_critic.to(device)
 
-        if self.verbose:
-            print(f"Done.")
+            if self.verbose:
+                print(f"Done.")
+
+            self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=PPOArgs.learning_rate)
 
         self.memory = None  # initialized later
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=PPOArgs.learning_rate)
+       
         self.step_simulation = Memory.Step()
 
         self.learning_rate = PPOArgs.learning_rate
@@ -125,6 +132,16 @@ class PPO:
 
     def load_policy_weights(self, weights):
         self.actor_critic.load_weights(weights)
+
+        if self.verbose:
+            print(f"Copying actorCritic to {self.device} ...", end='  ')
+
+        self.actor_critic.to(self.device)
+
+        if self.verbose:
+            print(f"Done.")
+
+        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=PPOArgs.learning_rate)
 
     def last_step(self, last_critic_obs, exp_obs):
         last_values = self.actor_critic.evaluate(last_critic_obs, exp_obs).detach()

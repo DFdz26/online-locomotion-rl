@@ -119,7 +119,7 @@ class Runner:
         closed_simulation = False
         self.starting_training_time = time.time()
 
-        for i in range(iterations):
+        for i in range(3):
             self.starting_iteration_time = time.time()
 
             for step in range(steps_per_iteration):
@@ -131,11 +131,16 @@ class Runner:
                 if closed_simulation or torch.all(dones > 0):
                     break
 
+
+            print(closed_simulation)
+            self.agents.reset_all_envs()
+
             if closed_simulation:
                 break
 
             if (i + 1) != iterations:
                 # Reset the environments
+                print("a")
                 self.agents.reset_all_envs()
                 self.obs, self.obs_exp = self.agents.create_observations()
 

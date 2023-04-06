@@ -95,8 +95,9 @@ class Logger:
         if robot != "":
             self.set_robot_name(robot)
 
-    def recover_nn_information(self):
-        self.folder = os.path.dirname(self.filename)
+    def recover_nn_information(self, filename=None):
+        filename = self.filename if filename is None else filename
+        self.folder = os.path.dirname(filename)
         nn_info_file = os.path.join(self.folder, "nn_config.json")
 
         with open(nn_info_file, "r") as f:
@@ -115,7 +116,7 @@ class Logger:
     def recover_algorithm_parameters(self, filename):
         self.folder = os.path.dirname(filename)
 
-        with open(os.path.join(self.folder, "algorithm_param.pickle"), 'rb') as f:
+        with open(os.path.join(self.folder, "algorithm_parameters.pickle"), 'rb') as f:
             algorithm_param = pickle.load(f)
 
         return algorithm_param
@@ -129,7 +130,8 @@ class Logger:
         return data
 
     def recover_data(self, filename, post=True):
-        self.filename = filename
+        if self.filename is None:
+            self.filename = filename
 
         with open(filename, "rb") as f:
             data = pickle.load(f)

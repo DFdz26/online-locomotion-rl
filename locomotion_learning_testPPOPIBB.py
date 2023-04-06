@@ -26,24 +26,28 @@ from isaacGymConfig.Curriculum import Curriculum, TerrainCurrCfg, AlgorithmCurrC
 
 config_file = "models/configs/config_minicheeta.json"
 graph_name = "graph_minicheeta_learning"
+cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_04_2023__22_07_23/300.pickle"
 
 # config_file = "models/configs/config_b1.json"
 # graph_name = "graph_b1_learning"
 
 SAVE_DATA = True
+RECOVER_CPG = True
 LOAD_CACHE = True
 TERRAIN_CURRICULUM = True
-rollouts = 50
-num_env_colums = 10
-learning_rate_PPO = 0.0000002  # 0.0000003
-start_PPO_acting_iteration = 350
+rollouts = 2000
+num_env_colums = 100
+# learning_rate_PPO = 0.0000003  # 0.0000003
+start_PPO_acting_iteration = 400
 device = "cuda:0"
 
+if RECOVER_CPG:
+    start_PPO_acting_iteration = 1
 
 def config_learning_curriculum():
     algCfg = AlgorithmCurrCfg()
     algCfg.PIBBCfg.threshold = start_PPO_acting_iteration
-    algCfg.PPOCfg.gamma = 0.2
+    algCfg.PPOCfg.gamma = 0.5
     algCfg.PPOCfg.change_RW_scales = True
 
     return algCfg
@@ -91,7 +95,10 @@ def config_terrain(env_config):
         curriculum_terr = TerrainCurrCfg()
 
         curriculum_terr.object = terrain_obj
-        curriculum_terr.Control.threshold = [450, 1050, 2050]
+        first_curr = start_PPO_acting_iteration + 70
+        second_curr = start_PPO_acting_iteration + 650
+        third_curr = start_PPO_acting_iteration + 1500
+        curriculum_terr.Control.threshold = [first_curr, second_curr, third_curr]
         curriculum_terr.percentage_step = 0.35
     else:
         curriculum_terr = None
@@ -116,7 +123,7 @@ reward_list = {
     },
 
     # "y_distance": {
-    #     "weight": -100.,
+    #     "weight": -0.06,
     #     "reward_data": {
     #         "absolute_distance": True
     #     }
@@ -158,7 +165,7 @@ reward_list = {
     "slippery": {
         "weight": 1.,
         "reward_data": {
-            "slippery_coef": -0.0085,
+            "slippery_coef": -0.0088,
         }
     },
 
@@ -211,24 +218,30 @@ reward_list = {
     },
 
     "vel_cont": {
-        "weight": 0.30,  # 0.25
+        "weight": -0.2,  # 0.25
     },
 
-    "orthogonal_angle_error": {
-        "weight": 0.1,
-        "reward_data": {
-            "weight": -0.02
-        }
-    },
+    # "orthogonal_angle_error": {
+    #     "weight": 0.1,
+    #     "reward_data": {
+    #         "weight": -0.02
+    #     }
+    # },
 
 }
 
 n_kernels = 20
 variance = 0.027
-decay = 0.9962
+decay = 0.996
 h = 10
-
 noise_boost = 1.75
+
+if RECOVER_CPG:
+    decay = 0.8
+    variance = 0.003
+    noise_boost = 0.9
+
+
 dt = 0.005
 seconds_iteration = 5
 max_iterations = 99001
@@ -280,6 +293,7 @@ n_out = cpg_rbf_nn.get_n_outputs()
 print(f"n_out: {n_out}")
 
 latent_space_size = 12
+priv_obs = 4
 
 actorArgs = NNCreatorArgs()
 # actorArgs.inputs = [39]
@@ -295,9 +309,9 @@ criticArgs.hidden_dim = [256, 128]
 criticArgs.outputs = [1]
 
 expertArgs = NNCreatorArgs()
-expertArgs.inputs = [3]
+expertArgs.inputs = [priv_obs]
 # criticArgs.hidden_dim = [128, 64]
-expertArgs.hidden_dim = [6]
+expertArgs.hidden_dim = [10]
 expertArgs.outputs = [latent_space_size]
 
 actor_std_noise = 1.
@@ -307,7 +321,7 @@ ppo = PPO(actorCritic, device=device, verbose=True)
 
 reward_obj = Rewards(rollouts, device, reward_list, 0.999999, step_env, discrete_rewards=True)
 pibb = PIBB(rollouts, h, 1, n_kernels * n_out, decay, variance, device="cuda:0", boost_noise=noise_boost)
-logger = Logger(save=SAVE_DATA, frequency=300, PIBB_param=pibb.get_hyper_parameters(), nn_config=config)
+logger = Logger(save=SAVE_DATA, frequency=100, PIBB_param=pibb.get_hyper_parameters(), nn_config=config)
 env_config = EnvConfig()
 
 config_env()
@@ -316,8 +330,13 @@ alg_curr = config_learning_curriculum()
 curricula = Curriculum(rollouts, device=device, terrain_config=terrain_curr, algorithm_config=alg_curr)
 logged = False
 
-learning_algorithm = PPO_PIBB(ppo, pibb, curricula)
 policy = MLP_CPG(actorCritic, cpg_rbf_nn)
+
+learning_algorithm = PPO_PIBB(ppo, pibb, curricula)
+
+if RECOVER_CPG:
+    learning_algorithm.read_data_point(cpg_filename, logger, policy, recover_MLP=False)
+
 
 robot = Runner(policy, learning_algorithm, logger, config_file, env_config, reward_obj, n_out,
                terrain_obj, curricula=curricula, verbose=True, store_observations=True)

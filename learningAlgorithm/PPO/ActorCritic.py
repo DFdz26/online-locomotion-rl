@@ -12,7 +12,7 @@ import torch.nn as nn
 from torch.distributions import Normal
 
 
-accepted_kwargs = ["debug_mess"]
+accepted_kwargs = ["debug_mess", "test"]
 
 
 class NNCreatorArgs:
@@ -28,31 +28,49 @@ class ActorCritic(nn.Module):
 
         super().__init__()
         self.__default_values_kwargs__()
+        self.actor_std_noise = actor_std_noise
 
         if kwargs:
             self.__prepare_kwargs__(kwargs)
 
-        self.__actor_building__(actorArgs)
-        self.__critic_building__(criticArgs)
-        self.__expert_building__(expertArgs)
+        if not self.test:
+            self.__actor_building__(actorArgs)
+            self.__critic_building__(criticArgs)
+            self.__expert_building__(expertArgs)
 
-        if self.debug_mess:
-            print(f"Actor MLP: {self.actor_NN}")
-            print(f"Critic MLP: {self.critic_NN}")
-            print(f"Expert MLP: {self.expert_NN}")
+            if self.debug_mess:
+                print(f"Actor MLP: {self.actor_NN}")
+                print(f"Critic MLP: {self.critic_NN}")
+                print(f"Expert MLP: {self.expert_NN}")
 
-        # Action noise
-        self.std = nn.Parameter(actor_std_noise * torch.ones(actorArgs.outputs[0]))
+            # Action noise
+            self.std = nn.Parameter(actor_std_noise * torch.ones(actorArgs.outputs[0]))        
+
+        else:
+            self.actor_NN = None
+            self.critic_NN = None
+            self.expert_NN = None
+
+            if self.debug_mess:
+                print(f"Actor critic and expert will be loaded.")
+
+            self.std = None
+        
         self.distribution = None
 
         # For optimizing the process
         Normal.set_default_validate_args = False
 
     def get_weights(self):
-        return [self.actor_NN, self.critic_NN, self.expert_NN]
+        return [self.actor_NN, self.critic_NN, self.expert_NN, self.std]
     
     def load_weights(self, actor_critic):
-        self.actor_NN, self.critic_NN, self.expert_NN = actor_critic
+        self.actor_NN, self.critic_NN, self.expert_NN, self.std = actor_critic
+
+        if self.debug_mess:
+            print(f"Actor MLP: {self.actor_NN}")
+            print(f"Critic MLP: {self.critic_NN}")
+            print(f"Expert MLP: {self.expert_NN}")
 
     def forward(self):
         pass
@@ -90,6 +108,7 @@ class ActorCritic(nn.Module):
 
     def __default_values_kwargs__(self):
         self.debug_mess = False
+        self.test = False
 
     def __prepare_kwargs__(self, kwargs):
         not_accepted, accepted = check_if_args_in_accepted(kwargs)
@@ -99,6 +118,9 @@ class ActorCritic(nn.Module):
 
         if "debug_mess" in accepted:
             self.debug_mess = accepted["debug_mess"]
+
+        if "test" in accepted:
+            self.test = accepted["test"]
 
     def __expert_building__(self, expertArgs):
         if self.debug_mess:

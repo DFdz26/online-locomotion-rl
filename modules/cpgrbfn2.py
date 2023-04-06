@@ -37,7 +37,7 @@ key_semi_indirect = "semi_indirect"
 class CPGRBFN(torchNet):
 
     # ---------------------- constructor ------------------------
-    def __init__(self, config, dimensions=1, load_cache=True):
+    def __init__(self, config, dimensions=1, load_cache=True, noise_to_zero=False):
 
         self.device = config["device"]
         self.reversed_cpg = False
