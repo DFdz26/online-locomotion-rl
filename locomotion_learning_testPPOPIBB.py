@@ -31,14 +31,16 @@ cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_
 # config_file = "models/configs/config_b1.json"
 # graph_name = "graph_b1_learning"
 
-SAVE_DATA = True
-RECOVER_CPG = True
+RENDER_GUI = False
+SAVE_DATA = False
+RECOVER_CPG = False
 LOAD_CACHE = True
 TERRAIN_CURRICULUM = True
-rollouts = 2000
+# rollouts = 1500
+rollouts = 1500
 num_env_colums = 100
 # learning_rate_PPO = 0.0000003  # 0.0000003
-start_PPO_acting_iteration = 400
+start_PPO_acting_iteration = 1
 device = "cuda:0"
 
 if RECOVER_CPG:
@@ -60,21 +62,21 @@ def config_terrain(env_config):
         },
         {
             "terrain": "random_uniform_terrain",
-            "min_height": -0.05,
-            "max_height": 0.05,
-            "step": 0.05,
+            "min_height": -0.025,
+            "max_height": 0.025,
+            "step": 0.025,
             "downsampled_scale": 0.5
         },
         {
             "terrain": "random_uniform_terrain",
-            "min_height": -0.075,
+            "min_height": -0.05,
             "max_height": 0.05,
             "step": 0.025,
             "downsampled_scale": 0.5
         },
         {
             "terrain": "random_uniform_terrain",
-            "min_height": -0.1,
+            "min_height": -0.075,
             "max_height": 0.075,
             "step": 0.025,
             "downsampled_scale": 0.5
@@ -112,6 +114,7 @@ def config_env():
     env_config.hip_scale = hip_scale
     env_config.dt = dt
     env_config.num_env_colums = num_env_colums
+    env_config.render_GUI = RENDER_GUI
 
 
 reward_list = {

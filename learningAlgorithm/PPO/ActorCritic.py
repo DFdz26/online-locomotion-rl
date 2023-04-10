@@ -98,6 +98,11 @@ class ActorCritic(nn.Module):
     def act(self, observations, expert_observations):
         self.update_distribution(observations, expert_observations)
         return self.distribution.sample()
+    
+    def act_test(self, observations, expert_observations):
+        latent_space = self.expert_NN(expert_observations)
+        selected_action = self.actor_NN(torch.cat((observations, latent_space), dim=-1))
+        return selected_action
 
     def get_actions_log_prob(self, actions):
         return self.distribution.log_prob(actions).sum(dim=-1)

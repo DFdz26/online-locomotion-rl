@@ -73,6 +73,9 @@ class PPO_PIBB:
         self.learnt_weight = combined
         self.test = test
 
+        if test:
+            self.PPO.test_mode()
+
         return noise, iteration, index
 
     def get_info_algorithm(self, get_PPO=True, get_PIBB=True):
@@ -167,9 +170,9 @@ class PPO_PIBB:
             PPO_actions = self.PPO.act(observation, expert_obs)
             PIBB_actions = self.PIBB.act(observation, expert_obs)
 
-            # return self.learnt_weight["PIBB"] * PIBB_actions + self.learnt_weight["PPO"] * PPO_actions
-            return PIBB_actions 
-            return 0.2* PPO_actions 
+            return 1 * PIBB_actions + 0.00* PPO_actions
+            # return PIBB_actions 
+            # return self.learnt_weight["PPO"]* PPO_actions 
         else:
             return self.curricula.act_curriculum(observation, expert_obs, self.PPO, self.PIBB)
 

@@ -56,7 +56,7 @@ class Logger:
             os.mkdir(root_run_folder_name)
 
         now = datetime.now()
-        self.folder_time = now.strftime("%d_%m_%Y__%H_%M_%S")
+        self.folder_time = now.strftime("%Y_%m_%d.%H_%M_%S")
         self.folder = os.path.join(root_run_folder_name, self.folder_time)
 
         self.frequency = frequency

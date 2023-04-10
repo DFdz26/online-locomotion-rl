@@ -18,7 +18,7 @@ from .Memory import Memory
 class PPOArgs:
     # value_loss_coef = 1.1
     # value_loss_coef = 150.
-    value_loss_coef = 15000.
+    value_loss_coef = 900.  # 1500
     clip_param = 0.2
     entropy_coef = 0.0008
     num_learning_epochs = 2  # 5
@@ -26,7 +26,7 @@ class PPOArgs:
     # num_mini_batches = 400  # mini batch size = num_envs*nsteps / nminibatches
     # learning_rate = 0.0000003  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000012  # 5.e-4 and 0.0000003
-    learning_rate = 0.000000032  # 5.e-4 and 0.0000003
+    learning_rate = 0.00000032  # 5.e-4 and 0.000000032
     # learning_rate = 0.000000012  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000015  # 5.e-4
     schedule = 'fixed'  # could be adaptive, fixed
@@ -52,6 +52,7 @@ class PPO:
         self.device = device
         self.verbose = verbose
         self.cfg = PPOArgs()
+        self.test = False
 
         # PPO components
         self.actor_critic = actor_critic
@@ -85,27 +86,31 @@ class PPO:
         self.memory = Memory(num_envs, num_step_simulations_per_env, action_shape, actor_obs_shape, expert_obs, self.device)
 
     def test_mode(self):
-        self.actor_critic.test()
+        self.test = True
+        # self.actor_critic.test()
 
     def train_mode(self):
         self.actor_critic.train()
 
     def act(self, observation, observation_expert, actions_mult=1.):
-        self.step_simulation.actions = self.actor_critic.act(observation, observation_expert).detach()
-        self.step_simulation.values = self.actor_critic.evaluate(observation, observation_expert).detach()
-        self.step_simulation.actions_log_prob = self.actor_critic.get_actions_log_prob(
-            self.step_simulation.actions).detach()
-        self.step_simulation.action_mean = self.actor_critic.action_mean.detach()
-        self.step_simulation.action_sigma = self.actor_critic.action_std.detach()
+        if self.test:
+            return self.actor_critic.act_test(observation, observation_expert)
+        else:
+            self.step_simulation.actions = self.actor_critic.act(observation, observation_expert).detach()
+            self.step_simulation.values = self.actor_critic.evaluate(observation, observation_expert).detach()
+            self.step_simulation.actions_log_prob = self.actor_critic.get_actions_log_prob(
+                self.step_simulation.actions).detach()
+            self.step_simulation.action_mean = self.actor_critic.action_mean.detach()
+            self.step_simulation.action_sigma = self.actor_critic.action_std.detach()
 
-        self.step_simulation.observations = observation
-        self.step_simulation.observation_expert = observation_expert
-        self.step_simulation.critic_observations = observation
+            self.step_simulation.observations = observation
+            self.step_simulation.observation_expert = observation_expert
+            self.step_simulation.critic_observations = observation
 
-        if actions_mult != 1.0:
-            self.step_simulation.actions *= actions_mult
+            if actions_mult != 1.0:
+                self.step_simulation.actions *= actions_mult
 
-        return self.step_simulation.actions
+            return self.step_simulation.actions
 
     def post_step_simulation(self, obs, exp_obs, actions, reward, dones, info, closed_simulation):
         if info is None:

@@ -7,6 +7,7 @@ import math
 import numpy as np
 import torch
 from .BaseConfiguration import BaseConfiguration
+from .envConfig import EnvConfig
 
 from .Rewards import rep_keyword, root_keyword, initial_keyword, projected_gravity_keyword, \
     contact_forces_gravity_keyword, previous_position_keyword
@@ -34,7 +35,7 @@ def convert_drive_mode(mode_str):
 
 
 class RobotConfig(BaseConfiguration):
-    def __init__(self, config_file, env_config, rewards, terrain_config=None, curricula=None, verbose=False):
+    def __init__(self, config_file, env_config: EnvConfig, rewards, terrain_config=None, curricula=None, verbose=False):
         with open(config_file) as f:
             self.cfg = json.load(f)
 
@@ -43,6 +44,7 @@ class RobotConfig(BaseConfiguration):
         self.use_gpu = self.cfg["sim_params"]["use_gpu"]
         self.env_config = env_config
         self.terrain_config = terrain_config
+        self.render_GUI = env_config.render_GUI
 
         self.asset_root = os.path.join(dir_path, relative_model_folder)
         self.asset_file = self.cfg["asset_options"]["asset_filename"]
@@ -467,6 +469,8 @@ class RobotConfig(BaseConfiguration):
         closed_simulation = self.compute_graphics()
         self.previous_dof_vel = self.dof_vel.detach().clone()
 
+        actions = torch.clip(actions, -self.env_config.clip_actions, self.env_config.clip_actions).to(self.device)
+
         if not closed_simulation:
             for _ in range(iterations_without_control):
                 self.move_dofs(test_data, actions, position_control=position_control)
@@ -485,20 +489,23 @@ class RobotConfig(BaseConfiguration):
         return obs, obs_expert, self.actions, self.reward, dones, info, closed_simulation
 
     def compute_graphics(self):
-        ending = self.gym.query_viewer_has_closed(self.viewer)
+        if self.render_GUI:
+            ending = self.gym.query_viewer_has_closed(self.viewer)
 
-        if not ending:
+            if not ending:
 
-            if self.device != 'cpu':
-                self.gym.fetch_results(self.sim, True)
+                if self.device != 'cpu':
+                    self.gym.fetch_results(self.sim, True)
 
-            self.gym.step_graphics(self.sim)
-            self.gym.draw_viewer(self.viewer, self.sim, True)
+                self.gym.step_graphics(self.sim)
+                self.gym.draw_viewer(self.viewer, self.sim, True)
 
-            # This synchronizes the physics simulation with the rendering rate.
-            self.gym.sync_frame_time(self.sim)
+                # This synchronizes the physics simulation with the rendering rate.
+                self.gym.sync_frame_time(self.sim)
 
-        return ending
+            return ending
+        else:
+            return False
     
     def get_num_observations(self):
         return self.num_observations, self.num_observations_sensors, self.num_expert_observations
@@ -544,20 +551,21 @@ class RobotConfig(BaseConfiguration):
         return obs, expert
 
     def __create_camera(self):
-        viewer = self.gym.create_viewer(self.sim, gymapi.CameraProperties())
+        if self.render_GUI:
+            viewer = self.gym.create_viewer(self.sim, gymapi.CameraProperties())
 
-        pos = [-5, 0, 1]  # [m]
-        lookat = [11., 5, 3.]  # [m]
+            pos = [-5, 0, 1]  # [m]
+            lookat = [11., 5, 3.]  # [m]
 
-        cam_pos = gymapi.Vec3(pos[0], pos[1], pos[2])
-        cam_target = gymapi.Vec3(lookat[0], lookat[1], lookat[2])
-        self.gym.viewer_camera_look_at(viewer, None, cam_pos, cam_target)
+            cam_pos = gymapi.Vec3(pos[0], pos[1], pos[2])
+            cam_target = gymapi.Vec3(lookat[0], lookat[1], lookat[2])
+            self.gym.viewer_camera_look_at(viewer, None, cam_pos, cam_target)
 
-        self.viewer = viewer
+            self.viewer = viewer
 
-        if self.viewer is None:
-            print("*** Failed to create viewer")
-            quit()
+            if self.viewer is None:
+                print("*** Failed to create viewer")
+                quit()
 
     def _load_asset(self, verbose=False) -> None:
 
@@ -660,3 +668,9 @@ class RobotConfig(BaseConfiguration):
 
         if not(self.curricula is None):
             self.curricula.set_initial_positions(self.started_position)
+
+    def __del__(self):
+        if not(self.viewer is None):
+            self.gym.destroy_viewer(self.viewer)
+
+        return super().__del__()
