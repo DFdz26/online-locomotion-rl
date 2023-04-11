@@ -18,7 +18,8 @@ from .Memory import Memory
 class PPOArgs:
     # value_loss_coef = 1.1
     # value_loss_coef = 150.
-    value_loss_coef = 900.  # 1500
+    # value_loss_coef = 1000.  # 1500
+    value_loss_coef = 300.  # 1500
     clip_param = 0.2
     entropy_coef = 0.0008
     num_learning_epochs = 2  # 5
@@ -26,7 +27,8 @@ class PPOArgs:
     # num_mini_batches = 400  # mini batch size = num_envs*nsteps / nminibatches
     # learning_rate = 0.0000003  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000012  # 5.e-4 and 0.0000003
-    learning_rate = 0.00000032  # 5.e-4 and 0.000000032
+    # learning_rate = 0.00000032  # 5.e-4 and 0.000000032
+    learning_rate = 5.e-4  # 5.e-4 and 0.000000032
     # learning_rate = 0.000000012  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000015  # 5.e-4
     schedule = 'fixed'  # could be adaptive, fixed

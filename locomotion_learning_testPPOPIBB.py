@@ -32,15 +32,16 @@ cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_
 # graph_name = "graph_b1_learning"
 
 RENDER_GUI = False
-SAVE_DATA = False
+SAVE_DATA = True
 RECOVER_CPG = False
 LOAD_CACHE = True
 TERRAIN_CURRICULUM = True
 # rollouts = 1500
 rollouts = 1500
+iterations_without_control = 1
 num_env_colums = 100
 # learning_rate_PPO = 0.0000003  # 0.0000003
-start_PPO_acting_iteration = 1
+start_PPO_acting_iteration = 350
 device = "cuda:0"
 
 if RECOVER_CPG:
@@ -62,6 +63,13 @@ def config_terrain(env_config):
         },
         {
             "terrain": "random_uniform_terrain",
+            "min_height": -0.010,
+            "max_height": 0.010,
+            "step": 0.010,
+            "downsampled_scale": 0.5
+        },
+        {
+            "terrain": "random_uniform_terrain",
             "min_height": -0.025,
             "max_height": 0.025,
             "step": 0.025,
@@ -69,9 +77,23 @@ def config_terrain(env_config):
         },
         {
             "terrain": "random_uniform_terrain",
+            "min_height": -0.035,
+            "max_height": 0.035,
+            "step": 0.035,
+            "downsampled_scale": 0.5
+        },
+        {
+            "terrain": "random_uniform_terrain",
             "min_height": -0.05,
             "max_height": 0.05,
             "step": 0.025,
+            "downsampled_scale": 0.5
+        },
+        {
+            "terrain": "random_uniform_terrain",
+            "min_height": -0.06,
+            "max_height": 0.06,
+            "step": 0.03,
             "downsampled_scale": 0.5
         },
         {
@@ -98,10 +120,13 @@ def config_terrain(env_config):
 
         curriculum_terr.object = terrain_obj
         first_curr = start_PPO_acting_iteration + 70
-        second_curr = start_PPO_acting_iteration + 650
-        third_curr = start_PPO_acting_iteration + 1500
-        curriculum_terr.Control.threshold = [first_curr, second_curr, third_curr]
-        curriculum_terr.percentage_step = 0.35
+        second_curr = start_PPO_acting_iteration + 250
+        third_curr = start_PPO_acting_iteration + 450
+        fourth_curr = start_PPO_acting_iteration + 750
+        fifth_curr = start_PPO_acting_iteration + 1050
+        sixth_curr = start_PPO_acting_iteration + 1500
+        curriculum_terr.Control.threshold = [first_curr, second_curr, third_curr, fourth_curr, fifth_curr, sixth_curr]
+        curriculum_terr.percentage_step = 0.32
     else:
         curriculum_terr = None
 
@@ -115,6 +140,7 @@ def config_env():
     env_config.dt = dt
     env_config.num_env_colums = num_env_colums
     env_config.render_GUI = RENDER_GUI
+    env_config.iterations_without_control = iterations_without_control
 
 
 reward_list = {
@@ -234,10 +260,10 @@ reward_list = {
 }
 
 n_kernels = 20
-variance = 0.027
-decay = 0.996
+variance = 0.019
+decay = 0.9965
 h = 10
-noise_boost = 1.75
+noise_boost = 1.5
 
 if RECOVER_CPG:
     decay = 0.8
@@ -246,7 +272,7 @@ if RECOVER_CPG:
 
 
 dt = 0.005
-seconds_iteration = 5
+seconds_iteration = 5 / 2
 max_iterations = 99001
 step_env = int(seconds_iteration / dt)
 step_env = int(seconds_iteration / 0.01)
@@ -296,7 +322,7 @@ n_out = cpg_rbf_nn.get_n_outputs()
 print(f"n_out: {n_out}")
 
 latent_space_size = 12
-priv_obs = 4
+priv_obs = 17
 
 actorArgs = NNCreatorArgs()
 # actorArgs.inputs = [39]
@@ -314,7 +340,7 @@ criticArgs.outputs = [1]
 expertArgs = NNCreatorArgs()
 expertArgs.inputs = [priv_obs]
 # criticArgs.hidden_dim = [128, 64]
-expertArgs.hidden_dim = [10]
+expertArgs.hidden_dim = [32]
 expertArgs.outputs = [latent_space_size]
 
 actor_std_noise = 1.

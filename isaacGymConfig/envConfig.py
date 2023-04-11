@@ -14,6 +14,7 @@ class EnvConfig:
     def __init__(self):
         self.default_joints_angles = None
         self.rollout_time = 3
+        self.iterations_without_control = 0
         self.num_env = 1
         self.spacing_env = -2
         self.spacing_env_x = 2

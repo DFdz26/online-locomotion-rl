@@ -472,7 +472,7 @@ class RobotConfig(BaseConfiguration):
         actions = torch.clip(actions, -self.env_config.clip_actions, self.env_config.clip_actions).to(self.device)
 
         if not closed_simulation:
-            for _ in range(iterations_without_control):
+            for _ in range(self.env_config.iterations_without_control + 1):
                 self.move_dofs(test_data, actions, position_control=position_control)
 
                 # step the physics
@@ -537,8 +537,11 @@ class RobotConfig(BaseConfiguration):
         # )
 
         in_contact = (torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1) > 1.).to(torch.float32)
-        contact_forces = torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1)
-        h = self.root_states[:, 2]
+        # contact_forces = torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1)
+        contact_forces = self.contact_forces[:, self.feet_indices, :].squeeze(dim=-1)
+       
+        # print(self.contact_forces[:, self.feet_indices, :].size())
+        h = self.root_states[:, 2].unsqueeze(dim=-1)
 
         # expert = torch.cat((
         #     self.terrain_config.get_info_terrain(self.base_pos),
@@ -548,7 +551,9 @@ class RobotConfig(BaseConfiguration):
 
         # expert = in_contact
         expert = torch.cat((
-             contact_forces,
+             contact_forces[:, :, 0],
+             contact_forces[:, :, 1],
+             contact_forces[:, :, 2],
              h,
              in_contact),
              dim=-1
