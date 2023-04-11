@@ -529,12 +529,16 @@ class RobotConfig(BaseConfiguration):
             dim=-1
         )
 
+        obs = torch.clip(obs, -self.env_config.clip_observations, self.env_config.clip_observations)
+
         # expert = torch.cat((
         #     torch.zeros(self.num_envs, 12, dtype=torch.float, device=self.device, requires_grad=False)),
         #     dim=-1
         # )
 
         in_contact = (torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1) > 1.).to(torch.float32)
+        contact_forces = torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1)
+        h = self.root_states[:, 2]
 
         # expert = torch.cat((
         #     self.terrain_config.get_info_terrain(self.base_pos),
@@ -542,7 +546,15 @@ class RobotConfig(BaseConfiguration):
         #     dim=-1
         # )
 
-        expert = in_contact
+        # expert = in_contact
+        expert = torch.cat((
+             contact_forces,
+             h,
+             in_contact),
+             dim=-1
+         )
+
+        expert = torch.clip(expert, -self.env_config.clip_observations, self.env_config.clip_observations)
 
         self.num_observations_sensors = obs.size()[1]
         self.num_expert_observations = expert.size()[1]

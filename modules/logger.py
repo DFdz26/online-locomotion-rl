@@ -7,9 +7,18 @@ from os import path
 import pickle
 import matplotlib as mpl
 import json
+from .videoSaver import VideoSaver
 
 mpl.use('qt5agg')
 root_run_folder_name = "runs"
+
+
+class VideoSettings:
+    height = 480
+    width = 640
+    fps = 30
+    n_frames = 100
+    filename = "video.mp4"
 
 
 class DataStore:
@@ -43,14 +52,31 @@ class DataStore:
 
 
 class Logger:
+    video_settings: VideoSettings
+
     def __init__(self, save=False, frequency=20, frequency_plot=5, robot="", nn_config=None, PIBB_param=None,
-                 test_value=False, size_figure=2):
+                 test_value=False, size_figure=2, video_frequency=0, video_settings=None):
+
+        if video_frequency != 0 and video_settings is None:
+            raise Exception("Set up the settings for recording the video")
+
         self.save_data = save
         self.nn_config = nn_config
         self.PIBB_param = PIBB_param
         self.test_value = test_value
         self.size_figure = size_figure
         self.filename = None
+
+        self.video_settings = video_settings
+        self.video_frequency = video_frequency
+        self.video_saver = None if video_frequency == 0 else [VideoSaver(self.video_settings.fps,
+                                                                         self.video_settings.n_frames,
+                                                                         self.video_settings.height,
+                                                                         self.video_settings.width,
+                                                                         self.video_settings.filename)]
+        self.record_in_progress = False
+        self.n_video_saver = 0 if self.video_saver is None else 1
+        self.all_buffer_video_full = False
 
         if not path.exists(root_run_folder_name):
             os.mkdir(root_run_folder_name)
@@ -87,13 +113,65 @@ class Logger:
         self.mean_distances = []
         self.mean_reward = []
         self.mean_std_height = []
+        self.iteration = 0
         self.figure, self.ax = plt.subplots(size_figure)
         plt.ion()
+
         self.distance = []
         self.time = []
 
         if robot != "":
             self.set_robot_name(robot)
+
+    def load_multiple_video_recoder(self, video_settings, video_frequency):
+        self.video_settings = video_settings
+        self.video_frequency = video_frequency
+
+        self.n_video_saver = len(video_settings)
+
+        self.video_saver = []
+
+        for setting in video_settings:
+            setting: VideoSettings
+
+            self.video_saver.append(
+                VideoSaver(
+                    setting.fps,
+                    setting.n_frames,
+                    setting.height,
+                    setting.width,
+                    os.path.join(self.folder, setting.filename)
+                )
+            )
+
+    def _start_video_record_(self):
+        self.record_in_progress = True
+        self.all_buffer_video_full = False
+
+        for video_saver in self.video_saver:
+            video_saver.start_record()
+
+    def store_and_save(self, frames):
+        if self.record_in_progress:
+            self.store_frames(frames)
+
+            if self.all_buffer_video_full:
+                self.save_videos()
+
+    def store_frames(self, frames):
+        self.all_buffer_video_full = True
+
+        for n_item in range(self.n_video_saver):
+            self.video_saver[n_item].store_frame(frames[n_item])
+            self.all_buffer_video_full = self.all_buffer_video_full and self.video_saver[n_item].buffer_full
+
+    def save_videos(self):
+        for video_saver in self.video_saver:
+            filename = video_saver.filename + "_" + str(self.iteration)
+            video_saver.save_video(filename)
+
+        self.all_buffer_video_full = False
+        self.record_in_progress = False
 
     def recover_nn_information(self, filename=None):
         filename = self.filename if filename is None else filename
@@ -180,7 +258,7 @@ class Logger:
 
             self.ax[0].plot(xpoints, ypoints)
             ypoints = np.array(self.mean_distances)
-            
+
             self.ax[1].clear()
 
             self.ax[1].set_title("Avg. distance (m) vs iteration")
@@ -233,6 +311,10 @@ class Logger:
         mean_reward = float(torch.mean(reward))
         mean_distance = float(torch.mean(distance))
         std_height_mean = float(torch.mean(std_height)) if not (std_height is None) else None
+        self.iteration = iteration
+
+        if self.video_frequency != 0 and (iteration % self.video_frequency) == 0:
+            self._start_video_record_()
 
         if (iteration % self.frequency_plot) == 0:
             self.x_axis.append(iteration)

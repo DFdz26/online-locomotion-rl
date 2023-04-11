@@ -76,6 +76,25 @@ cd examples && python3 1080_balls_of_solitude.py
 git clone https://github.com/DFdz26/online-locomotion-rl
 ```
 
+### Save videos (optional)
+
+In order to save videos during its training or its testing some libraries have to been set up:
+
+Install pillow:
+```bash
+pip install pillow
+```
+
+Install imageio:
+```bash
+pip install imageio
+```
+
+Install the packages for storing videos:
+```bash
+ pip install imageio[ffmpeg] imageio[pyav]
+```
+
 ## Run the controller with learned weights
 
 ## Run learning algorithm

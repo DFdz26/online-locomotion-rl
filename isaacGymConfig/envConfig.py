@@ -21,7 +21,8 @@ class EnvConfig:
         self.disable_leg = False
         self.num_env_colums = 10
 
-        self.clip_actions = 10.0
+        self.clip_actions = 100.0
+        self.clip_observations = 100.0
         self.render_GUI = True
 
         self.actions_scale = 0.2
