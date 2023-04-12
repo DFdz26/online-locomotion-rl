@@ -12,17 +12,33 @@ from PIL import Image
 import imageio
 
 
+class VideoFormat:
+    RGB = "RGB"
+    RGBA = "RGBA"
+
+
+def check_video_format_accepted(vFormat: str):
+    return hasattr(VideoFormat, vFormat)
+
+
 class VideoSaver:
-    def __init__(self, fps, n_frames, height, width, name_video="video.mp4"):
+    video_format: str
+
+    def __init__(self, fps, n_frames, height, width, name_video="video", vFormat=VideoFormat.RGBA):
         self.fps = fps
         self.started_record = False
         self.n_stored_frames = 0
         self.n_tot_frames = n_frames
-        self.stored_frames = np.zeros((n_frames, height, width, 3), dtype=np.uint8)
         self.filename = name_video
         self.height = height
         self.width = width
         self.buffer_full = False
+
+        if not(check_video_format_accepted(vFormat)):
+            raise Exception(f"The format {vFormat} is not implemented.")
+
+        self.stored_frames = np.zeros((n_frames, height, width, len(vFormat)), dtype=np.uint8)
+        self.video_format = vFormat
 
     def start_record(self):
         self.started_record = True
@@ -40,18 +56,18 @@ class VideoSaver:
     def save_video(self, filename=None):
 
         if self.started_record:
-            filename = self.filename if filename is None else filename + ".mp4"
+            filename = self.filename if filename is None else filename
             frames = []
 
             # Iterate over each frame in the stored array
             for frame in range(self.n_stored_frames):
                 # Convert the numpy array to an image
-                img = Image.fromarray(self.stored_frames[frame])
+                img = Image.fromarray(self.stored_frames[frame], self.video_format)
                 # Append the image to the frames list
                 frames.append(img)
 
             # Write the frames to a video file using imageio
-            imageio.mimwrite(filename, frames, fps=self.fps)
+            imageio.mimwrite(filename + ".mp4", frames, fps=self.fps)
 
             self.stop_record()
 
@@ -66,7 +82,7 @@ if __name__ == "__main__":
     video_class = VideoSaver(30, 100, height, width)
 
     video_class.start_record()
-    video = np.random.randint(0, 255, size=(100, height, width, 3), dtype=np.uint8)
+    video = np.random.randint(0, 255, size=(100, height, width, 4), dtype=np.uint8)
 
     for _frame in video:
         video_class.store_frame(_frame)

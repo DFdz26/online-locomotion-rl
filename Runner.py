@@ -1,11 +1,6 @@
 import math
 import time
-
-from isaacgym import gymapi
-from isaacgym import gymtorch
-from isaacgym.torch_utils import *
 import torch
-
 
 from isaacGymConfig.RobotConfig import RobotConfig
 from modules.logger import Logger
@@ -30,6 +25,9 @@ class Runner:
         self.num_observation_sensor = 1
         self.num_expert_observation = 1
         self.best_distance = True
+        self.num_terrains = 1 if terrain_config is None else terrain_config.rows
+
+        self.recording = False
 
         self.n_steps = 0
         self.n_iterations = 0
@@ -48,6 +46,27 @@ class Runner:
         if store_observations:
             self.num_observations, self.num_observation_sensor, self.num_expert_observation = self.agents.get_num_observations()
 
+    def _stop_recording(self):
+        if self.recording:
+            self.recording = False
+            self.agents.stop_recording_videos()
+
+            if self.logger.record_in_progress:
+                self.logger.save_videos()
+
+    def _recording_process(self):
+        if self.recording:
+            self.logger.store_and_save_video(self.agents.recorded_frames)
+
+            if not self.logger.record_in_progress:
+                self._stop_recording()
+
+    def _setup_recording(self):
+        if self.recording:
+            max_difficulty = None if self.curricula is None else self.curricula.get_max_difficulty_terrain()
+            terrains = None if max_difficulty is None else [*range(max_difficulty + 1)]
+            self.agents.set_up_recording_video(terrains)
+
     def _learning_process_(self, iteration, rewards):
         now_time = time.time()
 
@@ -57,7 +76,7 @@ class Runner:
         noise = self.learning_algorithm.get_noise()
         best_index = torch.argmax(distance if self.best_distance else rewards)
 
-        if not(noise is None):
+        if not (noise is None):
             noise = noise.detach().clone()
 
         self.logger.store_data(distance, rewards, self.learning_algorithm.get_weights_policy(), noise, iteration,
@@ -71,10 +90,14 @@ class Runner:
                                      iteration=iteration, total_time=total_elapsed_time, noise=noise,
                                      index=best_index)
 
+        if self.logger.record_in_progress:
+            self.recording = True
+            self._setup_recording()
+
     def learn(self, iterations, steps_per_iteration, best_distance=True):
         self.best_distance = best_distance
         steps_ppo = steps_per_iteration if self.curricula is None else math.ceil(
-            steps_per_iteration/self.curricula.reduce_steps)
+            steps_per_iteration / self.curricula.reduce_steps)
 
         closed_simulation = False
         self.starting_training_time = time.time()
@@ -85,18 +108,22 @@ class Runner:
             self.starting_iteration_time = time.time()
 
             for step in range(steps_per_iteration):
-                
+
                 actions = self.learning_algorithm.act(self.obs, self.obs_exp)
 
-                self.obs, self.obs_exp, actions, reward, dones, info, closed_simulation = self.agents.step(None, actions)
-                self.learning_algorithm.post_step_simulation(self.obs, self.obs_exp, actions, reward * 0.5, dones, info, closed_simulation)
+                self.obs, self.obs_exp, actions, reward, dones, info, closed_simulation = self.agents.step(None,
+                                                                                                           actions)
+                self.learning_algorithm.post_step_simulation(self.obs, self.obs_exp, actions, reward * 0.5, dones, info,
+                                                             closed_simulation)
+                self._recording_process()
 
                 if closed_simulation or torch.all(dones > 0):
                     break
 
             if closed_simulation:
                 break
-            
+
+            self._stop_recording()
             final_reward = self.agents.compute_final_reward()
             rewards = final_reward * 0.5
             self.learning_algorithm.last_step(self.obs, self.obs_exp)
@@ -105,7 +132,7 @@ class Runner:
 
             if (i + 1) != iterations:
                 # In case of having curriculum, update it
-                if not(self.curricula is None):
+                if not (self.curricula is None):
                     steps_per_iteration = self.curricula.set_control_parameters(i, final_reward, None,
                                                                                 self.rewards, self.learning_algorithm,
                                                                                 steps_per_iteration)
@@ -131,7 +158,6 @@ class Runner:
                 if closed_simulation or torch.all(dones > 0):
                     break
 
-
             print(closed_simulation)
             self.agents.reset_all_envs()
 
@@ -143,4 +169,3 @@ class Runner:
                 print("a")
                 self.agents.reset_all_envs()
                 self.obs, self.obs_exp = self.agents.create_observations()
-

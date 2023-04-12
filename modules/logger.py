@@ -27,7 +27,7 @@ class VideoSettings:
     width = 640
     fps = 30
     n_frames = 100
-    filename = "video.mp4"
+    filename = "video"
 
 
 class DataStore:
@@ -132,6 +132,9 @@ class Logger:
         if robot != "":
             self.set_robot_name(robot)
 
+    def is_recording_in_progress(self):
+        return self.record_in_progress
+
     def load_multiple_video_recoder(self, video_settings, video_frequency):
         self.video_settings = video_settings
         self.video_frequency = video_frequency
@@ -160,7 +163,7 @@ class Logger:
         for video_saver in self.video_saver:
             video_saver.start_record()
 
-    def store_and_save(self, frames):
+    def store_and_save_video(self, frames):
         if self.record_in_progress:
             self.store_frames(frames)
 

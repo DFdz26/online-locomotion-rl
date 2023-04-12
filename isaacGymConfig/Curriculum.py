@@ -26,13 +26,8 @@ type_curriculums = [
     "reward"
 ]
 
-type_controls = [
-    "terrain",
-    "randomization",
-]
 
-
-class RandmizationCurrCfg:
+class RandomizationCurrCfg:
     name_type = "randomization"
 
     class MotorParameters:
@@ -270,6 +265,8 @@ class TerrainCurriculum:
 
         self.iteration = 0
         self.reward = -999
+        self.n_jumps = 0
+        self.max_difficulty = 0
 
     def set_initial_position(self, initial_position):
         self.initial_position = initial_position.detach().clone()
@@ -283,9 +280,17 @@ class TerrainCurriculum:
         self.control_env += jump
 
         limit = torch.nonzero(self.control_env > self.steps).flatten()
+        self.n_jumps += 1
 
         if len(limit):
             self.control_env[limit] = self.steps
+
+        self.max_difficulty = int(torch.max(self.control_env))
+
+    def jump_env_to_terrain(self, env, terrain):
+        terrain = terrain if terrain < self.steps else self.steps
+
+        return self.initial_position[env, 0] + self.width_terrains * terrain
 
     def _update_iterations_(self, initial_position):
         if type(self.threshold) is list and self.control_step < len(self.threshold):
@@ -341,12 +346,19 @@ class Curriculum:
 
         self.terrain_curriculum.set_initial_position(positions)
 
+    def get_max_difficulty_terrain(self):
+        if self.terrain_curriculum is None:
+            return None
+
+        return self.terrain_curriculum.max_difficulty
+
     def _set_curriculums_(self):
         self.terrain_curriculum = None if self.terrain_config is None else TerrainCurriculum(self.num_env,
                                                                                              self.device,
                                                                                              self.terrain_config)
         self.algorithm_curriculum = None if self.algorithm_config is None else AlgorithmCurriculum(self.device,
-                                                                                                   self.algorithm_config)
+                                                                                                   self.algorithm_config
+                                                                                                   )
         self.randomization_curriculum = None
 
         if not (self.algorithm_curriculum is None):
@@ -367,6 +379,12 @@ class Curriculum:
             return self.algorithm_curriculum.get_curriculum_action(PPO, PIBB, observation, expert_obs)
 
         return None
+
+    def jump_env_to_terrain(self, env, terrain, initial_positions):
+        if self.terrain_curriculum is None:
+            return initial_positions
+
+        return self.terrain_curriculum.jump_env_to_terrain(env, terrain)
 
     def post_step_simulation(self, obs, exp_obs, actions, reward, dones, info, PPO, PIBB):
         if not (self.algorithm_curriculum is None):

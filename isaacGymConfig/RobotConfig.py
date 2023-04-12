@@ -35,7 +35,8 @@ def convert_drive_mode(mode_str):
 
 
 class RobotConfig(BaseConfiguration):
-    def __init__(self, config_file, env_config: EnvConfig, rewards, terrain_config=None, curricula=None, verbose=False):
+    def __init__(self, config_file, env_config: EnvConfig, rewards,
+                 terrain_config=None, curricula=None, verbose=False):
         with open(config_file) as f:
             self.cfg = json.load(f)
 
@@ -45,6 +46,8 @@ class RobotConfig(BaseConfiguration):
         self.env_config = env_config
         self.terrain_config = terrain_config
         self.render_GUI = env_config.render_GUI
+        self.camera_settings = self.env_config.sensors.Camera
+        self.envs_with_camera = None  # Filled once the cameras have been created
 
         self.asset_root = os.path.join(dir_path, relative_model_folder)
         self.asset_file = self.cfg["asset_options"]["asset_filename"]
@@ -104,6 +107,12 @@ class RobotConfig(BaseConfiguration):
         self.__prepare_sim()
 
         self.viewer = None
+        self.sensor_camera = None
+        self.recording_in_progress = False
+        self.previous_started_position_recording = None
+        self.cameras_take_frame = 0
+        self.recorded_frames = []
+
         self.__create_camera()
 
         self.root_states = None
@@ -124,9 +133,6 @@ class RobotConfig(BaseConfiguration):
 
     def get_asset_name(self):
         return self.asset_name
-
-    def next_curriculum_level(self):
-        pass
 
     def _create_terrain_(self):
 
@@ -265,6 +271,8 @@ class RobotConfig(BaseConfiguration):
             self.previous_robot_position = self.root_states[:, :3].detach().clone()
             self.previous_robot_velocity = self.base_lin_vel.detach().clone()
             self.check_termination()
+
+        self.recorded_frames = self._get_cameras_frame()
 
     def __prepare_distance_and_termination_rollout_buffers_(self):
         rew = self.rewards.reward_terms
@@ -565,6 +573,76 @@ class RobotConfig(BaseConfiguration):
 
         return obs, expert
 
+    def _create_default_camera(self, n_env):
+        camera_props = gymapi.CameraProperties()
+        camera_props.width = self.camera_settings.width
+        camera_props.height = self.camera_settings.height
+        camera_handle = self.gym.create_viewer(self.envs[n_env], camera_props)
+
+        if self.envs_with_camera is None:
+            self.envs_with_camera = []
+
+        self.envs_with_camera.append(n_env)  # Keep a record the env with cameras
+
+        return camera_handle
+
+    def stop_recording_videos(self):
+        self.started_position[self.envs_with_camera] = self.previous_started_position_recording
+        self.recording_in_progress = False
+
+    def set_up_recording_video(self, terrains_to_record: list):
+        """
+        Function to set up the needed configurations for starting recording the simulation.
+        Receives a list with the desired terrains to record. If the length of the list exceeds the number of
+        available cameras, the last terrains will be recorded
+        :param terrains_to_record: List with the terrains that want to be recorded.
+        :return:
+        """
+
+        self.previous_started_position_recording = self.started_position[self.envs_with_camera]
+        self.recording_in_progress = True
+
+        if self.curricula is None or terrains_to_record is None:
+            self.cameras_take_frame = 1
+            return None
+
+        n_terrains = len(terrains_to_record)
+
+        if n_terrains > len(self.envs_with_camera):
+            self.cameras_take_frame = len(self.envs_with_camera)
+            desired_terrains = terrains_to_record[:-self.cameras_take_frame]
+        else:
+            desired_terrains = terrains_to_record
+            self.cameras_take_frame = n_terrains
+
+        for i in range(self.cameras_take_frame):
+            selected_env = self.envs_with_camera[i]
+
+            self.started_position[selected_env] = self.curricula.jump_env_to_terrain(
+                selected_env,
+                desired_terrains[i],
+                self.started_position[selected_env]
+            )
+
+    def _get_cameras_frame(self):
+        if not self.recording_in_progress:
+            return []
+
+        frames = []
+
+        for i in range(self.cameras_take_frame):
+            frames.append(self._get_frame_individual_camera(self.sensor_camera[i], self.envs_with_camera[i]))
+
+        return frames
+
+    def _get_frame_individual_camera(self, camera, selected_env):
+        bx, by, bz = self.root_states[selected_env, 0], self.root_states[selected_env, 1], self.root_states[selected_env, 2]
+        self.gym.set_camera_location(camera, self.envs[selected_env], gymapi.Vec3(bx, by - 1.0, bz + 1.0),
+                                     gymapi.Vec3(bx, by, bz))
+        frame = self.gym.get_camera_image(self.sim, self.envs[selected_env], camera, gymapi.IMAGE_COLOR)
+
+        return frame
+
     def __create_camera(self):
         if self.render_GUI:
             viewer = self.gym.create_viewer(self.sim, gymapi.CameraProperties())
@@ -581,6 +659,15 @@ class RobotConfig(BaseConfiguration):
             if self.viewer is None:
                 print("*** Failed to create viewer")
                 quit()
+
+        if self.env_config.sensors.Activations.camera_activated:
+            self.sensor_camera = []
+
+            n_camera_settings = self.env_config.sensors.Camera.n_camera
+            n_cameras = n_camera_settings if self.num_envs > n_camera_settings else self.num_envs
+
+            for env in range(n_cameras):
+                self.sensor_camera.append(self._create_default_camera(env))
 
     def _load_asset(self, verbose=False) -> None:
 
