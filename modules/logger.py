@@ -1,3 +1,12 @@
+"""
+Class: Logger
+created by: Daniel Mauricio Fernandez Gonzalez
+e-mail: dafer21@student.sdu.dk
+date: 11 April 2023
+
+Logger
+"""
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch

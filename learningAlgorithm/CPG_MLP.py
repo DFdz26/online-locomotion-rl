@@ -1,5 +1,15 @@
+"""
+Class: PPO_PIBB
+created by: Daniel Mauricio Fernandez Gonzalez
+e-mail: dafer21@student.sdu.dk
+date: 15 February 2023
+
+Fusion PPO and PIBB algorithms
+"""
+
 import torch
 import pickle
+
 
 # from PPO.PPO import PPO as PPO_class
 # from PIBB.PIBB import PIBB as PIBB_class
@@ -18,7 +28,7 @@ class MLP_CPG:
 
     def get_CPG_RBFN(self):
         return self.CPG
-    
+
     def load_weights(self, file, load_CPG=True, load_MLP=True):
         if load_CPG:
             self.CPG.load_weights()
@@ -94,7 +104,7 @@ class PPO_PIBB:
         return [self.PPO.get_policy_weights(), self.PIBB.get_policy_weights(), self.curricula.get_weights_NN()]
 
     def update(self, policy, rewards):
-        
+
         return self.curricula.update_algorithm(policy, rewards, self.PPO, self.PIBB)
 
     def print_info(self, rw, rep, total_time, rollout_time, loss):
@@ -108,7 +118,7 @@ class PPO_PIBB:
                 'kl_mean': 0,
             }
 
-        mean_fitness = float(torch.mean(rw)) 
+        mean_fitness = float(torch.mean(rw))
         self.accum_fitness += mean_fitness
 
         if mean_fitness > self.max_fitness["record"]:
@@ -130,10 +140,11 @@ class PPO_PIBB:
         mean_fitness *= 1000
 
         print("=============================")
-        print(f"Rep: {rep}, gamma: {self.curricula.algorithm_curriculum.gamma}, gamma_it: {self.curricula.algorithm_curriculum.count_increase_gamma}")
+        print(f"Rep: {rep}, gamma: {self.curricula.algorithm_curriculum.gamma}, "
+              f"gamma_it: {self.curricula.algorithm_curriculum.count_increase_gamma}")
         print(f"Mean fitness: {mean_fitness}")
         print(f"Max fitness: {self.max_fitness['record']} at iteration: {self.max_fitness['iteration']}")
-        print(f"Mean accu fitness: {self.accum_fitness/(rep + 1) * 1000}")
+        print(f"Mean accu fitness: {self.accum_fitness / (rep + 1) * 1000}")
         print(f"PPO::: Value loss: {loss['mean_value_loss']}", end="\t")
         print(f"Surrogate loss: {loss['mean_surrogate_loss']}", end="\t")
         print(f"Learning rate: {loss['lr']}", end="\t")
@@ -143,11 +154,14 @@ class PPO_PIBB:
         print(f"PIBB::: variance: {self.PIBB.variance}")
         print(f"Total time (s): {total_time}")
         print(f"Rollout time (s): {rollout_time}")
-        
+
         if self.curricula.algorithm_curriculum.PPO_learning_activated:
-            print(f"Max PPO fitness: {self.history_PPO_fitness['record']} at iteration: {self.history_PPO_fitness['iteration_max']}")
-            print(f"Min PPO fitness: {self.history_PPO_fitness['minimum']} at iteration: {self.history_PPO_fitness['iteration_min']}")
-            print(f"Mean PPO fitness: {self.history_PPO_fitness['mean']/(self.history_PPO_fitness['counter']) * 1000}")
+            print(f"Max PPO fitness: {self.history_PPO_fitness['record']} at iteration: "
+                  f"{self.history_PPO_fitness['iteration_max']}")
+            print(f"Min PPO fitness: {self.history_PPO_fitness['minimum']} at iteration: "
+                  f"{self.history_PPO_fitness['iteration_min']}")
+            print(
+                f"Mean PPO fitness: {self.history_PPO_fitness['mean'] / (self.history_PPO_fitness['counter']) * 1000}")
 
         print("=============================")
 
@@ -164,13 +178,13 @@ class PPO_PIBB:
 
     def get_noise(self):
         return self.PIBB.get_noise()
-    
+
     def act(self, observation, expert_obs):
         if self.test:
             PPO_actions = self.PPO.act(observation, expert_obs)
             PIBB_actions = self.PIBB.act(observation, expert_obs)
 
-            return 1 * PIBB_actions + 0.00* PPO_actions
+            return 1 * PIBB_actions + 0.00 * PPO_actions
             # return PIBB_actions 
             # return self.learnt_weight["PPO"]* PPO_actions 
         else:
@@ -178,7 +192,7 @@ class PPO_PIBB:
 
 
 if __name__ == "__main__":
-    from PPO.ActorCritic import ActorCritic 
+    from PPO.ActorCritic import ActorCritic
     from PPO.ActorCritic import NNCreatorArgs
     from PPO.PPO import PPO
 
@@ -188,7 +202,7 @@ if __name__ == "__main__":
     actorArgs.inputs = [42]
     actorArgs.hidden_dim = [32, 12]
     actorArgs.outputs = [5]
-    
+
     criticArgs = NNCreatorArgs()
     criticArgs.inputs = [42]
     criticArgs.hidden_dim = [32, 12]
@@ -200,7 +214,7 @@ if __name__ == "__main__":
     ppo = PPO(actorCritic, device="cuda:0", verbose=True)
 
     print('creating memory')
-    
+
     ppo.init_memory(15, 100, 42, 12)
     print('Created memory')
 

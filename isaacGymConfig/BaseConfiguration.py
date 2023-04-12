@@ -45,7 +45,6 @@ class BaseConfiguration:
         sim_params.up_axis = gymapi.UP_AXIS_Z
         # sim_params.up_axis = 1
         sim_params.gravity = gymapi.Vec3(0.0, 0.0, -9.8)
-        
 
         sim_params.use_gpu_pipeline = cfg["sim_params"]["use_gpu"]
         sim_params.dt = dt_
@@ -61,11 +60,8 @@ class BaseConfiguration:
             print("*** Failed to create sim")
             quit()
 
-
     def __del__(self):
 
-        if not(self.sim is None):
-                
+        if not (self.sim is None):
             # Cleanup the simulator
             self.gym.destroy_sim(self.sim)
-        

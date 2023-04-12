@@ -59,7 +59,8 @@ class Terrain:
         self.num_terrains = len(self.terrain_list) * self.config.columns
         self.rows = len(self.terrain_list)
         self.information_terrain = []
-        self.observation_terrain = torch.zeros(self.num_envs, len(self.terrain_list), device=self.device, requires_grad=False)
+        self.observation_terrain = torch.zeros(self.num_envs, len(self.terrain_list),
+                                               device=self.device, requires_grad=False)
         self._config_terrain_()
 
     def get_info_terrain(self, positions):

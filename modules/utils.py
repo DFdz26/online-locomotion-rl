@@ -98,7 +98,8 @@ class CPGUtils:
 
         if samples < 3:
             raise Exception(
-                f"There are no enough samples for computing the frequency of the CPG, increase the initial steps.\nActual: {steps_int}")
+                f"There are no enough samples for computing the frequency of the CPG, increase the initial "
+                f"steps.\nCurrent: {steps_int}")
 
         _ = period_buff.pop(0)
         self.period = sum(period_buff) / (samples - 1)

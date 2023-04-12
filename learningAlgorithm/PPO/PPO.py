@@ -85,7 +85,8 @@ class PPO:
         self.train_mode()
 
     def init_memory(self, num_envs, num_step_simulations_per_env, actor_obs_shape, expert_obs, action_shape):
-        self.memory = Memory(num_envs, num_step_simulations_per_env, action_shape, actor_obs_shape, expert_obs, self.device)
+        self.memory = Memory(num_envs, num_step_simulations_per_env, action_shape,
+                             actor_obs_shape, expert_obs, self.device)
 
     def test_mode(self):
         self.test = True

@@ -1,8 +1,9 @@
 """
 Class: CPG
 created by: arthicha srisuchinnawong
-e-mail: arsri21@student.sdu.dk
-date: 1 August 2022
+Modified by: Daniel Fernandez
+e-mail: dafer21@student.sdu.dk
+date last modification: 5-01-23
 
 Central Pattern Generator
 """
@@ -10,10 +11,6 @@ Central Pattern Generator
 # ------------------- import modules ---------------------
 
 # standard modules
-import colorama
-
-colorama.init(autoreset=True)
-
 # math-related modules
 import numpy as np  # cpu array
 import torch  # cpu & gpu array

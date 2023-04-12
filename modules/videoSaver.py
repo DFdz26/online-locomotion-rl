@@ -1,3 +1,12 @@
+"""
+Class: VideoSaver
+created by: Daniel Mauricio Fernandez Gonzalez
+e-mail: dafer21@student.sdu.dk
+date: 8 April 2023
+
+Video Saver
+"""
+
 import numpy as np
 from PIL import Image
 import imageio

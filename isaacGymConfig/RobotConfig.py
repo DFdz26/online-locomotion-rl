@@ -124,7 +124,7 @@ class RobotConfig(BaseConfiguration):
 
     def get_asset_name(self):
         return self.asset_name
-    
+
     def next_curriculum_level(self):
         pass
 
@@ -178,7 +178,7 @@ class RobotConfig(BaseConfiguration):
                                               gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
     def reset_all_envs(self):
-        if not(self.curricula is None):
+        if not (self.curricula is None):
             self.started_position = self.curricula.get_terrain_curriculum(self.started_position)
 
         self._reset_root()
@@ -200,7 +200,6 @@ class RobotConfig(BaseConfiguration):
 
         if not (None is touching):
             self.finished |= torch.all(touching > 1., dim=0)
-
 
         all_touching = torch.all(touching > 1, dim=0) if not (None is touching) else False
         all_limits = torch.all(self.limits > 1., dim=0)
@@ -235,7 +234,7 @@ class RobotConfig(BaseConfiguration):
             base_ang_vel_keyboard: self.base_ang_vel,
             base_previous_lin_vel_keyboard: self.previous_robot_velocity
         }
-        
+
         return simulation_info
 
     def compute_final_reward(self):
@@ -254,7 +253,6 @@ class RobotConfig(BaseConfiguration):
                                                           )[:, self.feet_indices, 7:10]
 
         if not self.env_config.test_joints:
-
             self.foot_positions = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices,
                                   0:3]
 
@@ -373,7 +371,7 @@ class RobotConfig(BaseConfiguration):
                                                                                          penalization_contact_names[i])
 
         feet_names = [s for s in body_names if self.cfg["asset_options"]["foot_contacts_on"] in s]
-        
+
         print(body_names)
         print(feet_names)
         self.feet_indices = torch.zeros(len(feet_names), dtype=torch.long, device=self.device, requires_grad=False)
@@ -385,7 +383,7 @@ class RobotConfig(BaseConfiguration):
         self.foot_velocities = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:,
                                self.feet_indices,
                                7:10]
-        
+
         self.finished = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
         self.previous_dof_vel = self.dof_vel.detach().clone()
 
@@ -506,7 +504,7 @@ class RobotConfig(BaseConfiguration):
             return ending
         else:
             return False
-    
+
     def get_num_observations(self):
         return self.num_observations, self.num_observations_sensors, self.num_expert_observations
 
@@ -539,7 +537,7 @@ class RobotConfig(BaseConfiguration):
         in_contact = (torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1) > 1.).to(torch.float32)
         # contact_forces = torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1)
         contact_forces = self.contact_forces[:, self.feet_indices, :].squeeze(dim=-1)
-       
+
         # print(self.contact_forces[:, self.feet_indices, :].size())
         h = self.root_states[:, 2].unsqueeze(dim=-1)
 
@@ -551,13 +549,13 @@ class RobotConfig(BaseConfiguration):
 
         # expert = in_contact
         expert = torch.cat((
-             contact_forces[:, :, 0],
-             contact_forces[:, :, 1],
-             contact_forces[:, :, 2],
-             h,
-             in_contact),
-             dim=-1
-         )
+            contact_forces[:, :, 0],
+            contact_forces[:, :, 1],
+            contact_forces[:, :, 2],
+            h,
+            in_contact),
+            dim=-1
+        )
 
         expert = torch.clip(expert, -self.env_config.clip_observations, self.env_config.clip_observations)
 
@@ -662,8 +660,8 @@ class RobotConfig(BaseConfiguration):
             # Create one environment
 
             env = self.gym.create_env(self.sim, lower, upper, num_per_row)
-            pos_aux_p[1] = i%self.env_config.num_env_colums * self.env_config.spacing_env
-            pos_aux_p[0] = math.floor(i/self.env_config.num_env_colums) * self.env_config.spacing_env_x
+            pos_aux_p[1] = i % self.env_config.num_env_colums * self.env_config.spacing_env
+            pos_aux_p[0] = math.floor(i / self.env_config.num_env_colums) * self.env_config.spacing_env_x
             self.started_position[i] = torch.FloatTensor(pos_aux_p).to(self.device)
             self.previous_robot_position[i] = self.started_position[i]
             pose.p = gymapi.Vec3(*pos_aux_p)
@@ -683,11 +681,11 @@ class RobotConfig(BaseConfiguration):
             self.envs.append(env)
             self.robot_handles.append(robot_handle)
 
-        if not(self.curricula is None):
+        if not (self.curricula is None):
             self.curricula.set_initial_positions(self.started_position)
 
     def __del__(self):
-        if not(self.viewer is None):
+        if not (self.viewer is None):
             self.gym.destroy_viewer(self.viewer)
 
         return super().__del__()

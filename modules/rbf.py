@@ -10,11 +10,6 @@ Radial Basis Function Network
 
 # ------------------- import modules ---------------------
 
-# standard modules
-import colorama
-
-colorama.init(autoreset=True)
-
 # math-related modules
 import numpy as np  # cpu array
 import torch  # cpu & gpu array

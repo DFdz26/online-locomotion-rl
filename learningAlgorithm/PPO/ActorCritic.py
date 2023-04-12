@@ -11,7 +11,6 @@ import torch
 import torch.nn as nn
 from torch.distributions import Normal
 
-
 accepted_kwargs = ["debug_mess", "test"]
 
 
@@ -44,7 +43,7 @@ class ActorCritic(nn.Module):
                 print(f"Expert MLP: {self.expert_NN}")
 
             # Action noise
-            self.std = nn.Parameter(actor_std_noise * torch.ones(actorArgs.outputs[0]))        
+            self.std = nn.Parameter(actor_std_noise * torch.ones(actorArgs.outputs[0]))
 
         else:
             self.actor_NN = None
@@ -55,7 +54,7 @@ class ActorCritic(nn.Module):
                 print(f"Actor critic and expert will be loaded.")
 
             self.std = None
-        
+
         self.distribution = None
 
         # For optimizing the process
@@ -63,7 +62,7 @@ class ActorCritic(nn.Module):
 
     def get_weights(self):
         return [self.actor_NN, self.critic_NN, self.expert_NN, self.std]
-    
+
     def load_weights(self, actor_critic):
         self.actor_NN, self.critic_NN, self.expert_NN, self.std = actor_critic
 
@@ -98,7 +97,7 @@ class ActorCritic(nn.Module):
     def act(self, observations, expert_observations):
         self.update_distribution(observations, expert_observations)
         return self.distribution.sample()
-    
+
     def act_test(self, observations, expert_observations):
         latent_space = self.expert_NN(expert_observations)
         selected_action = self.actor_NN(torch.cat((observations, latent_space), dim=-1))
@@ -178,15 +177,15 @@ class ActorCritic(nn.Module):
 
         for h in range(len(args.hidden_dim)):
             layers.append(nn.Linear(size_input, args.hidden_dim[h]))
-            #nn.init.normal_(layers[-1].weight, mean=0.0, std=0.0)
+            # nn.init.normal_(layers[-1].weight, mean=0.0, std=0.0)
 
-            if not(activation is None):
+            if not (activation is None):
                 layers.append(activation)
 
             size_input = args.hidden_dim[h]
 
         layers.append(nn.Linear(size_input, args.outputs[0]))
-        #nn.init.normal_(layers[-1].weight, mean=0.0, std=0.0)
+        # nn.init.normal_(layers[-1].weight, mean=0.0, std=0.0)
 
         return layers
 

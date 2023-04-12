@@ -2,9 +2,6 @@ import sys
 import math
 import torch
 
-import matplotlib.pyplot as plt
-import numpy as np
-
 
 class PIBB(object):
     def __init__(self, _rollouts, _h, _decay_h, _noise_len, decay, variance, device="cpu", boost_noise=1):
@@ -137,4 +134,3 @@ class PIBB(object):
 
     def act(self, obs, obs_exp):
         return self.policy.forward(obs)
-

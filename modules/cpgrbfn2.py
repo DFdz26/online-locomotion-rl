@@ -11,20 +11,16 @@ CPG-RBFN class for locomotion learning
 # ------------------- import modules ---------------------
 
 # standard modules
-import time, sys, os
 
 # math-related modules
-import numpy as np  # cpu array
 import torch  # cpu & gpu array
-from torch.autograd import Variable
-from torch.distributions import Normal
 
+from modules.cpg import CPG  # Central Pattern Generator
+from modules.mn import MN  # Motor Neurons
+from modules.rbf import RBF  # Central Pattern Generator
 # network
 # from modules.utils import HyperParams # hyperparameter structure
 from modules.torchNet import torchNet  # torch-based network template
-from modules.cpg import CPG  # Central Pattern Generator
-from modules.rbf import RBF  # Central Pattern Generator
-from modules.mn import MN  # Motor Neurons
 from modules.utils import CPGUtils  # Motor Neurons
 
 key_direct = "direct"

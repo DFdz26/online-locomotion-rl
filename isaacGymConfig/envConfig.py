@@ -1,13 +1,13 @@
-class test_config:
-        actions = None
-        scale_actions = 0
-        scale_hip = 0
-        p_gain = None
-        d_gain = None
-        height = 0.
+class TestConfig:
+    actions = None
+    scale_actions = 0
+    scale_hip = 0
+    p_gain = None
+    d_gain = None
+    height = 0.
 
-        def __init__(self) -> None:
-            pass
+    def __init__(self) -> None:
+        pass
 
 
 class EnvConfig:
@@ -34,6 +34,4 @@ class EnvConfig:
 
         self.position_control = True
 
-        self.test_config = test_config()
-
-    
+        self.test_config = TestConfig()

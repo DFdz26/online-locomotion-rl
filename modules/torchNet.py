@@ -8,12 +8,6 @@ torch-based neural network, a template for other neural modules
 """
 
 # ------------------- import modules ---------------------
-
-# standard modules
-import colorama
-
-colorama.init(autoreset=True)
-
 # math-related modules
 import torch  # cpu & gpu array
 

@@ -21,7 +21,6 @@ from .Rewards import Rewards
 TerrainComCfg_type = NewType('TerrainComCfg_type', TerrainComCfg)
 Terrain_type = NewType('Terrain_type', Terrain)
 
-
 type_curriculums = [
     "iterations",
     "reward"
@@ -45,7 +44,7 @@ class RandmizationCurrCfg:
 
         percentage_motor_strength = [0, 10]
         step_noise_motor = 1
-    
+
     class ModelParameters:
         percentage_mass_noise = [0, 10]
         percentage_com_noise = [0, 10]
@@ -57,7 +56,7 @@ class RandmizationCurrCfg:
     class Control:
         threshold = None
         steps = 0.
-        type = "iterations"    
+        type = "iterations"
 
 
 class TerrainCurrCfg:
@@ -65,7 +64,7 @@ class TerrainCurrCfg:
         threshold = None
         step = 0
         type = "iterations"
-        
+
     percentage_step = 0.7
     object = None
 
@@ -136,7 +135,7 @@ class AlgorithmCurriculum:
             self.PIBB_learning_activated = True
 
     @staticmethod
-    def _change_RW_scales_(RewardObj:Rewards):
+    def _change_RW_scales_(RewardObj: Rewards):
         rw_weights = RewardObj.get_rewards()
 
         rw_weights["roll_pitch"]["weight"] *= 1.5
@@ -147,7 +146,7 @@ class AlgorithmCurriculum:
     def _start_PPO_(self, RewardObj, steps_per_iteration):
         self.PPO_activated = True
         self.PPO_learning_activated = True
-        steps_per_iteration = int(math.floor(steps_per_iteration/self.cfg.PPOCfg.divider_initial_steps))
+        steps_per_iteration = int(math.floor(steps_per_iteration / self.cfg.PPOCfg.divider_initial_steps))
         self.gamma = self.cfg.PPOCfg.gamma
 
         if self.cfg.PPOCfg.change_RW_scales:
@@ -196,7 +195,7 @@ class AlgorithmCurriculum:
             # Scale the output to be [-2, 2]
             for i in range(len(actions_PPO)):
                 new = [(actions_PPO[i] - torch.min(actions_PPO[i])) / (
-                            torch.max(actions_PPO[i]) - torch.min(actions_PPO[i])) - 0.5] * 4
+                        torch.max(actions_PPO[i]) - torch.min(actions_PPO[i])) - 0.5] * 4
                 actions_PPO[i] = new[0]
 
             if actions is None:
@@ -245,17 +244,18 @@ class AlgorithmCurriculum:
         if self.PPO_learning_activated:
             PPO.last_step(obs, exp_obs)
 
+
 class TerrainCurriculum:
     def __init__(self, num_env, device, cfg: TerrainCurrCfg) -> None:
         if None is cfg.object:
             raise Exception("Object not passed to the Terrain Curriculum Configuration object")
-        
+
         if None is cfg.Control.threshold:
             raise Exception("Threshold not set up for the Terrain Curriculum")
-        
+
         if not (cfg.Control.type in type_curriculums):
             raise Exception(f"Type {cfg.Control.type} is not implemented")
-        
+
         self.cfg = cfg
         self.object = Terrain_type(self.cfg.object)
         self.type = self.cfg.Control.type
@@ -294,7 +294,7 @@ class TerrainCurriculum:
                 self._update_iteration_jump_()
                 self.control_step += 1
 
-                initial_position[:, 0] = self.initial_position[:, 0] + self.width_terrains * self.control_env       
+                initial_position[:, 0] = self.initial_position[:, 0] + self.width_terrains * self.control_env
 
         elif type(self.threshold) is int:
             if self.iteration == self.threshold:
@@ -303,7 +303,7 @@ class TerrainCurriculum:
                 self.threshold += self.control_step
 
                 initial_position[:, 0] = self.initial_position[:, 0] + self.width_terrains * self.control_env
-            
+
         return initial_position
 
     def _update_reward_(self, initial_poistion):
@@ -311,7 +311,7 @@ class TerrainCurriculum:
 
     def update(self, initial_position):
         return getattr(self, "_update_" + self.type + "_")(initial_position)
-        
+
 
 class Curriculum:
     def __init__(self, num_env, device, terrain_config=None, randomization_config=None, algorithm_config=None) -> None:
@@ -330,7 +330,7 @@ class Curriculum:
             "PIBB": 1.
         }
 
-        if not(self.algorithm_curriculum is None):
+        if not (self.algorithm_curriculum is None):
             weights["PPO"], weights["PIBB"] = self.algorithm_curriculum.get_NN_weights()
 
         return weights
@@ -338,15 +338,18 @@ class Curriculum:
     def set_initial_positions(self, positions):
         if self.terrain_curriculum is None:
             return
-        
+
         self.terrain_curriculum.set_initial_position(positions)
 
     def _set_curriculums_(self):
-        self.terrain_curriculum = None if self.terrain_config is None else TerrainCurriculum(self.num_env, self.device, self.terrain_config)
-        self.algorithm_curriculum = None if self.algorithm_config is None else AlgorithmCurriculum( self.device, self.algorithm_config)
+        self.terrain_curriculum = None if self.terrain_config is None else TerrainCurriculum(self.num_env,
+                                                                                             self.device,
+                                                                                             self.terrain_config)
+        self.algorithm_curriculum = None if self.algorithm_config is None else AlgorithmCurriculum(self.device,
+                                                                                                   self.algorithm_config)
         self.randomization_curriculum = None
 
-        if not(self.algorithm_curriculum is None):
+        if not (self.algorithm_curriculum is None):
             self.reduce_steps = self.algorithm_curriculum.cfg.PPOCfg.divider_initial_steps
 
     def update_algorithm(self, policy, rewards, PPO, PIBB):
@@ -356,37 +359,37 @@ class Curriculum:
         return None
 
     def last_step(self, obs, exp_obs, PPO, PIBB):
-        if not(self.algorithm_curriculum is None):
+        if not (self.algorithm_curriculum is None):
             self.algorithm_curriculum.last_step_learning(obs, exp_obs, PIBB, PPO)
 
     def act_curriculum(self, observation, expert_obs, PPO, PIBB):
-        if not(self.algorithm_curriculum is None):
+        if not (self.algorithm_curriculum is None):
             return self.algorithm_curriculum.get_curriculum_action(PPO, PIBB, observation, expert_obs)
 
         return None
 
     def post_step_simulation(self, obs, exp_obs, actions, reward, dones, info, PPO, PIBB):
-        if not(self.algorithm_curriculum is None):
+        if not (self.algorithm_curriculum is None):
             self.algorithm_curriculum.post_step_simulation(obs, exp_obs, actions, reward, dones, info, PPO, PIBB)
 
     def set_control_parameters(self, iterations, reward, distance, RwObj, AlgObj, steps_per_iteration):
         new_steps_per_iteration = steps_per_iteration
 
-        if not(self.terrain_curriculum is None):
+        if not (self.terrain_curriculum is None):
             self.terrain_curriculum.set_control_parameters(iterations, reward)
 
-        if not(self.randomization_curriculum is None):
+        if not (self.randomization_curriculum is None):
             self.randomization_curriculum.set_control_parameters(iterations, reward)
 
-        if not(self.algorithm_curriculum is None):
-            new_steps_per_iteration = self.algorithm_curriculum.set_control_parameters(iterations, reward, distance, RwObj, AlgObj, new_steps_per_iteration)
+        if not (self.algorithm_curriculum is None):
+            new_steps_per_iteration = self.algorithm_curriculum.set_control_parameters(iterations, reward, distance,
+                                                                                       RwObj, AlgObj,
+                                                                                       new_steps_per_iteration)
 
         return new_steps_per_iteration
 
     def get_terrain_curriculum(self, initial_positions):
         if self.terrain_curriculum is None:
             return initial_positions
-        
-        return self.terrain_curriculum.update(initial_positions)
-        
 
+        return self.terrain_curriculum.update(initial_positions)

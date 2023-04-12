@@ -11,26 +11,17 @@ Motor Neuron
 # ------------------- import modules ---------------------
 
 # standard modules
-import time, sys, os
-from copy import deepcopy
-import colorama
-
-colorama.init(autoreset=True)
-from colorama import Fore
+import os
 import os.path
 import pickle
 
 # math-related modules
-import numpy as np  # cpu array
 import torch  # cpu & gpu array
-import torch as T
-from torch.distributions import Normal, Categorical
 
 # modular network
 from modules.torchNet import torchNet
 
 # plot
-import matplotlib.pyplot as plt
 
 # ------------------- configuration variables ---------------------
 
