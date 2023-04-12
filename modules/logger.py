@@ -156,6 +156,8 @@ class Logger:
                 )
             )
 
+            print(f"Videos will be saved as: {os.path.join(self.folder, setting.filename)}_x.mp4")
+
     def _start_video_record_(self):
         self.record_in_progress = True
         self.all_buffer_video_full = False
@@ -173,11 +175,15 @@ class Logger:
     def store_frames(self, frames):
         self.all_buffer_video_full = True
 
-        for n_item in range(self.n_video_saver):
+        max_n_frames = self.n_video_saver if len(frames) > self.n_video_saver else len(frames)
+
+        for n_item in range(max_n_frames):
             self.video_saver[n_item].store_frame(frames[n_item])
             self.all_buffer_video_full = self.all_buffer_video_full and self.video_saver[n_item].buffer_full
 
     def save_videos(self):
+        print("Saving videos ...")
+
         for video_saver in self.video_saver:
             filename = video_saver.filename + "_" + str(self.iteration)
             video_saver.save_video(filename)
@@ -237,6 +243,15 @@ class Logger:
                     os.mkdir(path_to_check)
 
                 self.folder = os.path.join(path_to_check, self.folder_time)
+                
+                if self.video_saver is not None:
+                    self._change_path_videos(self.folder)
+                
+    def _change_path_videos(self, new_path):
+        if type(self.video_saver) is list:
+
+            for videSaver in self.video_saver:
+                videSaver.filename = os.path.join(new_path, os.path.basename(videSaver.filename))
 
     def save_points_testing(self, distance, time):
         self.distance.append(float(torch.mean(distance)))

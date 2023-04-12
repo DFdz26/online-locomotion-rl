@@ -250,6 +250,10 @@ class RobotConfig(BaseConfiguration):
         return rewards
 
     def post_step(self):
+        if self.recording_in_progress:
+            self.gym.step_graphics(self.sim)
+            self.gym.render_all_camera_sensors(self.sim)
+
         self.base_quat[:] = self.root_states[:, 3:7]
         self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
         self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
@@ -577,7 +581,7 @@ class RobotConfig(BaseConfiguration):
         camera_props = gymapi.CameraProperties()
         camera_props.width = self.camera_settings.width
         camera_props.height = self.camera_settings.height
-        camera_handle = self.gym.create_viewer(self.envs[n_env], camera_props)
+        camera_handle = self.gym.create_camera_sensor(self.envs[n_env], camera_props)
 
         if self.envs_with_camera is None:
             self.envs_with_camera = []
@@ -640,7 +644,8 @@ class RobotConfig(BaseConfiguration):
         self.gym.set_camera_location(camera, self.envs[selected_env], gymapi.Vec3(bx, by - 1.0, bz + 1.0),
                                      gymapi.Vec3(bx, by, bz))
         frame = self.gym.get_camera_image(self.sim, self.envs[selected_env], camera, gymapi.IMAGE_COLOR)
-
+        frame = frame.reshape((self.camera_settings.height, self.camera_settings.width, 4))
+        
         return frame
 
     def __create_camera(self):

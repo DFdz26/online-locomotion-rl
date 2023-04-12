@@ -31,6 +31,9 @@ cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_
 # config_file = "models/configs/config_b1.json"
 # graph_name = "graph_b1_learning"
 
+ACTIVE_RECORDING_CAMERA = True
+frequency_recording = 100
+
 RENDER_GUI = False
 SAVE_DATA = True
 RECOVER_CPG = False
@@ -46,6 +49,37 @@ device = "cuda:0"
 
 if RECOVER_CPG:
     start_PPO_acting_iteration = 1
+
+
+def config_camera(activate, _env_config: EnvConfig, _logger: Logger, frames, fps=30):
+    if activate:
+        from modules.logger import VideoSettings
+
+        n_camera = 3
+        height_camera = 480
+        width_camera = 640
+
+        _env_config.sensors.Activations.camera_activated = True
+        _env_config.sensors.Camera.height = height_camera
+        _env_config.sensors.Camera.width = width_camera
+        _env_config.sensors.Camera.n_camera = n_camera
+
+        settings = []
+        for _ in range(n_camera):
+            vSett = VideoSettings()
+            vSett.width = width_camera
+            vSett.height = height_camera
+            vSett.n_frames = frames
+            vSett.fps = fps
+
+            settings.append(vSett)
+        
+        settings[0].filename = 'easy'
+        settings[1].filename = 'medium'
+        settings[2].filename = 'hard'
+
+        _logger.load_multiple_video_recoder(settings, frequency_recording)
+
 
 def config_learning_curriculum():
     algCfg = AlgorithmCurrCfg()
@@ -66,13 +100,6 @@ def config_terrain(env_config):
             "min_height": -0.010,
             "max_height": 0.010,
             "step": 0.010,
-            "downsampled_scale": 0.5
-        },
-        {
-            "terrain": "random_uniform_terrain",
-            "min_height": -0.025,
-            "max_height": 0.025,
-            "step": 0.025,
             "downsampled_scale": 0.5
         },
         {
@@ -123,9 +150,8 @@ def config_terrain(env_config):
         second_curr = start_PPO_acting_iteration + 250
         third_curr = start_PPO_acting_iteration + 450
         fourth_curr = start_PPO_acting_iteration + 750
-        fifth_curr = start_PPO_acting_iteration + 1050
-        sixth_curr = start_PPO_acting_iteration + 1500
-        curriculum_terr.Control.threshold = [first_curr, second_curr, third_curr, fourth_curr, fifth_curr, sixth_curr]
+        fifth_curr = start_PPO_acting_iteration + 1750
+        curriculum_terr.Control.threshold = [first_curr, second_curr, third_curr, fourth_curr, fifth_curr]
         curriculum_terr.percentage_step = 0.32
     else:
         curriculum_terr = None
@@ -145,7 +171,7 @@ def config_env():
 
 reward_list = {
     "x_distance": {
-        "weight": 0.1,
+        "weight": 2.2,
         "reward_data": {
             "absolute_distance": False
         }
@@ -260,10 +286,10 @@ reward_list = {
 }
 
 n_kernels = 20
-variance = 0.019
+variance = 0.027
 decay = 0.9965
 h = 10
-noise_boost = 1.5
+noise_boost = 1.75
 
 if RECOVER_CPG:
     decay = 0.8
@@ -350,10 +376,12 @@ ppo = PPO(actorCritic, device=device, verbose=True)
 
 reward_obj = Rewards(rollouts, device, reward_list, 0.999999, step_env, discrete_rewards=True)
 pibb = PIBB(rollouts, h, 1, n_kernels * n_out, decay, variance, device="cuda:0", boost_noise=noise_boost)
-logger = Logger(save=SAVE_DATA, frequency=100, PIBB_param=pibb.get_hyper_parameters(), nn_config=config)
 env_config = EnvConfig()
-
 config_env()
+
+logger = Logger(save=SAVE_DATA, frequency=100, PIBB_param=pibb.get_hyper_parameters(), nn_config=config)
+config_camera(ACTIVE_RECORDING_CAMERA, env_config, logger, step_env, int(1/0.01))
+
 terrain_obj, terrain_curr = config_terrain(env_config)
 alg_curr = config_learning_curriculum()
 curricula = Curriculum(rollouts, device=device, terrain_config=terrain_curr, algorithm_config=alg_curr)

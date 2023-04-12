@@ -25,17 +25,19 @@ from isaacGymConfig.TerrainConfig import Terrain, TerrainComCfg
 from isaacGymConfig.Curriculum import Curriculum
 
 config_file = "models/configs/config_minicheeta.json"
-graph_name = "graph_minicheeta_learning"
+graph_name = "graph_minicheeta_testing"
 
 # checkpoint_file = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_04_2023__07_25_57/2400.pickle"
 # checkpoint_file = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_04_2023__16_25_16/1200.pickle"
-checkpoint_file = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_04_2023__22_07_23/300.pickle"
+# checkpoint_file = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_04_2023__22_07_23/300.pickle"
+# checkpoint_file = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/2023_04_11.07_15_29/600.pickle"
+checkpoint_file = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/2023_04_11.23_02_48/1400.pickle"
 # checkpoint_file = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/07_04_2023__00_48_51/400.pickle"
 
 # config_file = "models/configs/config_b1.json"
 # graph_name = "graph_b1_learning"
 
-
+iterations_without_control = 1
 SAVE_DATA = True
 LOAD_CACHE = True
 TERRAIN_CURRICULUM = True
@@ -50,26 +52,40 @@ logger = Logger(test_value=True, size_figure=1)
 
 def config_terrain(env_config):
     list_terrains = [
-        {
-            "terrain": "flat_terrain",
-        },
+        # {
+        #     "terrain": "flat_terrain",
+        # },
         {
             "terrain": "random_uniform_terrain",
-            "min_height": -0.05,
-            "max_height": 0.05,
-            "step": 0.05,
+            "min_height": -0.010,
+            "max_height": 0.010,
+            "step": 0.010,
             "downsampled_scale": 0.5
         },
         {
             "terrain": "random_uniform_terrain",
-            "min_height": -0.075,
+            "min_height": -0.035,
+            "max_height": 0.035,
+            "step": 0.035,
+            "downsampled_scale": 0.5
+        },
+        {
+            "terrain": "random_uniform_terrain",
+            "min_height": -0.05,
             "max_height": 0.05,
             "step": 0.025,
             "downsampled_scale": 0.5
         },
         {
             "terrain": "random_uniform_terrain",
-            "min_height": -0.1,
+            "min_height": -0.06,
+            "max_height": 0.06,
+            "step": 0.03,
+            "downsampled_scale": 0.5
+        },
+        {
+            "terrain": "random_uniform_terrain",
+            "min_height": -0.075,
             "max_height": 0.075,
             "step": 0.025,
             "downsampled_scale": 0.5
@@ -96,6 +112,7 @@ def config_env():
     env_config.hip_scale = hip_scale
     env_config.dt = dt
     env_config.num_env_colums = num_env_colums
+    env_config.iterations_without_control = iterations_without_control
 
 
 noise_boost = 1.75

@@ -59,6 +59,8 @@ class VideoSaver:
             filename = self.filename if filename is None else filename
             frames = []
 
+            filename += ".mp4"
+
             # Iterate over each frame in the stored array
             for frame in range(self.n_stored_frames):
                 # Convert the numpy array to an image
@@ -67,7 +69,7 @@ class VideoSaver:
                 frames.append(img)
 
             # Write the frames to a video file using imageio
-            imageio.mimwrite(filename + ".mp4", frames, fps=self.fps)
+            imageio.mimwrite(filename, frames, fps=self.fps)
 
             self.stop_record()
 

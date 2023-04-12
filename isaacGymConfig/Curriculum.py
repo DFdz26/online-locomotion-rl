@@ -287,10 +287,11 @@ class TerrainCurriculum:
 
         self.max_difficulty = int(torch.max(self.control_env))
 
-    def jump_env_to_terrain(self, env, terrain):
+    def jump_env_to_terrain(self, env, terrain, initial_position):
         terrain = terrain if terrain < self.steps else self.steps
+        initial_position[0] = self.initial_position[env, 0] + self.width_terrains * terrain
 
-        return self.initial_position[env, 0] + self.width_terrains * terrain
+        return initial_position
 
     def _update_iterations_(self, initial_position):
         if type(self.threshold) is list and self.control_step < len(self.threshold):
@@ -384,7 +385,7 @@ class Curriculum:
         if self.terrain_curriculum is None:
             return initial_positions
 
-        return self.terrain_curriculum.jump_env_to_terrain(env, terrain)
+        return self.terrain_curriculum.jump_env_to_terrain(env, terrain, initial_positions)
 
     def post_step_simulation(self, obs, exp_obs, actions, reward, dones, info, PPO, PIBB):
         if not (self.algorithm_curriculum is None):

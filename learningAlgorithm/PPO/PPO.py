@@ -28,7 +28,7 @@ class PPOArgs:
     # learning_rate = 0.0000003  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000012  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000032  # 5.e-4 and 0.000000032
-    learning_rate = 5.e-4  # 5.e-4 and 0.000000032
+    learning_rate = 1.e-3  # 5.e-4 and 0.000000032
     # learning_rate = 0.000000012  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000015  # 5.e-4
     schedule = 'fixed'  # could be adaptive, fixed

@@ -12,8 +12,8 @@ class TestConfig:
 
 class Sensors:
     class Activations:
-        height_measurement_activated = True
-        camera_activated = True
+        height_measurement_activated = False
+        camera_activated = False
 
     class HeightMeasurement:
         # Default config in x: 10-50cm on each side
