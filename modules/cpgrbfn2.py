@@ -33,12 +33,16 @@ key_semi_indirect = "semi_indirect"
 class CPGRBFN(torchNet):
 
     # ---------------------- constructor ------------------------
-    def __init__(self, config, dimensions=1, load_cache=True, noise_to_zero=False):
+    def __init__(self, config, dimensions=1, load_cache=True, noise_to_zero=False, verbose=True):
 
         self.device = config["device"]
         self.reversed_cpg = False
         self.__n_out = 0
         self.dimensions = dimensions
+        self.verbose = verbose
+        self.dic_converter = None
+        self.__encoding = None
+        self.load_cache = load_cache
 
         super().__init__(config["device"])
         self.index_aux = torch.arange(self.dimensions, device=self.device, requires_grad=False)
@@ -50,12 +54,12 @@ class CPGRBFN(torchNet):
 
         # motor gain
         if "MN" in config:
-            mn_gain = list((config['MN']['GAIN']).split(","))
-            mn_gain = [float(gain) for gain in mn_gain]
+            self.mn_gain = list((config['MN']['GAIN']).split(","))
+            self.mn_gain = [float(gain) for gain in self.mn_gain]
         else:
-            mn_gain = None
+            self.mn_gain = None
 
-        abs_weights = config['abs_weights'] if 'abs_weights' in config else False
+        self.abs_weights = config['abs_weights'] if 'abs_weights' in config else False
 
         # ---------------------- initialize modular neural network ------------------------
         # (update in this order)
@@ -69,8 +73,8 @@ class CPGRBFN(torchNet):
                        device=self.device)
 
         # Motor Network
-        self.mn = MN(self.__hyperparams, outputgain=mn_gain, device=self.device, dimensions=dimensions,
-                     load_cache=load_cache, abs_weights=abs_weights)
+        self.mn = MN(self.__hyperparams, outputgain=self.mn_gain, device=self.device, dimensions=dimensions,
+                     load_cache=self.load_cache, abs_weights=self.abs_weights)
 
         self.cpg_history = CPGUtils(config, self.cpg, verbose=True)
 
@@ -102,6 +106,26 @@ class CPGRBFN(torchNet):
 
     def get_n_outputs(self):
         return self.__n_out
+
+    def change_indirect_encoding_to_direct(self):
+        if not (self.__encoding == key_indirect):
+            raise Exception("In order to switch the CPG-RBFN needs to be using indirect encoding")
+
+        if self.verbose:
+            print("Switching to direct encoding")
+
+        self.__encoding = key_direct
+
+        previous_w = self.mn.W.detach().copy()
+        self.dic_converter[key_direct]()
+        self.__hyperparams["n_out"] = self.__n_out
+        self.__hyperparams["encoding"] = self.__encoding
+        self.mn = MN(self.__hyperparams, outputgain=self.mn_gain, device=self.device, dimensions=self.dimensions,
+                     load_cache=self.load_cache, abs_weights=self.abs_weights)
+        self.mn.load_weights(previous_w.repeat(1, 4))
+
+    def get_len_PIBB_noise(self):
+        return self.__n_state * self.__n_out
 
     def _set_up_hyperparameters(self, in_dic):
         self.__n_in = int(in_dic['NIN'])
@@ -138,8 +162,10 @@ class CPGRBFN(torchNet):
             raise Exception(f"{self.__encoding} is not a valid encoding. Implemented encodings: \n{aux_helper}.")
 
         self.__hyperparams["n_out"] = self.__n_out
+        self.dic_converter = dic_converter
 
-        print(f"self.__n_out: {self.__n_out}")
+        if self.verbose:
+            print(f"self.__n_out: {self.__n_out}")
 
     # ---------------------- debugging   ------------------------
     def get_state(self):

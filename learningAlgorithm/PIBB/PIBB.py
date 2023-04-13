@@ -17,13 +17,26 @@ class PIBB(object):
 
         self.p = torch.zeros(_rollouts, dtype=torch.float32, device=self.device, requires_grad=False)
         self.s_norm = torch.ones(_rollouts, dtype=torch.float32, device=self.device, requires_grad=False)
-        self.cost_weighted_noise = torch.zeros(_noise_len, dtype=torch.float32, device=self.device, requires_grad=False)
+        self.cost_weighted_noise = None
+        self.noise_arr = None
 
-        self.noise_arr = torch.zeros([_rollouts, _noise_len], dtype=torch.float32, device=device,
-                                     requires_grad=False).normal_(mean=0., std=math.sqrt(variance) * boost_noise)
+        self.create_noise_cost_weighted_noise(_noise_len, boost_noise=boost_noise)
 
     def get_p(self):
         return self.p
+
+    def create_noise_cost_weighted_noise(self, _noise_len, boost_noise=1., new_variance=None, new_decay=None):
+        if not(new_decay is None):
+            self.decay = new_decay
+
+        if not(new_variance is None):
+            self.variance = new_variance
+            self.variance_ex = new_variance
+
+        self.cost_weighted_noise = torch.zeros(_noise_len, dtype=torch.float32, device=self.device, requires_grad=False)
+
+        self.noise_arr = torch.zeros([self.rollouts, _noise_len], dtype=torch.float32, device=self.device,
+                                     requires_grad=False).normal_(mean=0., std=math.sqrt(self.variance) * boost_noise)
 
     def get_h(self):
         return self.h

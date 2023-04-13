@@ -86,6 +86,14 @@ class AlgorithmCurrCfg:
         control_stop_learning = "iterations"
         threshold = 350
 
+        switching_indirect_to_direct = False
+        control_switching_direct = "iterations"
+        threshold_switching = 50
+
+        variance_at_switching = None
+        decay_at_switching = None
+        boost_first_switching_noise = 1.
+
         start_at_begining = True
 
     class StoredDistance:
@@ -116,6 +124,7 @@ class AlgorithmCurriculum:
                                                requires_grad=False)
 
         self._set_up_activated_learning_output_()
+        self.switching_CPG_RBFN = self.cfg.PIBBCfg.switching_indirect_to_direct
 
     def get_NN_weights(self):
         return [self.gamma, 1.]
@@ -138,6 +147,26 @@ class AlgorithmCurriculum:
 
         RewardObj.change_rewards(rw_weights)
 
+    def _change_indirect_to_direct(self, learningObj):
+        # Make sure it only happens once
+        self.switching_CPG_RBFN = False
+
+        # Modify the rbfn - motor neuron connections and copying the learnt weights so far
+        CPG_RBFN = learningObj.PIBB.policy
+        CPG_RBFN.change_indirect_encoding_to_direct()
+
+        # Get the required info for creating the new noise tensor and cost weighted noise tensor
+        len_pibb_noise = CPG_RBFN.get_len_PIBB_noise()
+        boost_noise = self.cfg.PIBBCfg.boost_first_switching_noise
+        new_variance = self.cfg.PIBBCfg.variance_at_switching
+        new_decay = self.cfg.PIBBCfg.decay_at_switching
+
+        # Modify the length of the noise and cost weighted noise tensor creating new ones
+        learningObj.PIBB.create_noise_cost_weighted_noise(len_pibb_noise,
+                                                          boost_noise=boost_noise,
+                                                          new_variance=new_variance,
+                                                          new_decay=new_decay)
+
     def _start_PPO_(self, RewardObj, steps_per_iteration):
         self.PPO_activated = True
         self.PPO_learning_activated = True
@@ -151,6 +180,9 @@ class AlgorithmCurriculum:
 
     def set_control_parameters(self, iterations, reward, distance, RewardObj, learningObj, steps_per_iteration):
         self.iteration = iterations
+
+        if self.switching_CPG_RBFN and self.iteration == self.cfg.PIBBCfg.threshold_switching:
+            self._change_indirect_to_direct(learningObj)
 
         if 0 < self.cfg.PPOCfg.start_iteration_learning == iterations:
             steps_per_iteration = self._start_PPO_(RewardObj, steps_per_iteration)

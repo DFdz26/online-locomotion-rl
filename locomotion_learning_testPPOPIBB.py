@@ -34,6 +34,7 @@ cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_
 ACTIVE_RECORDING_CAMERA = True
 frequency_recording = 100
 
+CURRICULUM_CPG_RBFN = True
 RENDER_GUI = False
 SAVE_DATA = True
 RECOVER_CPG = False
@@ -86,6 +87,13 @@ def config_learning_curriculum():
     algCfg.PIBBCfg.threshold = start_PPO_acting_iteration
     algCfg.PPOCfg.gamma = 0.5
     algCfg.PPOCfg.change_RW_scales = True
+
+    if CURRICULUM_CPG_RBFN and not RECOVER_CPG:
+        algCfg.PIBBCfg.switching_indirect_to_direct = True
+        algCfg.PIBBCfg.threshold_switching = 150
+        algCfg.PIBBCfg.decay_at_switching = 0.992
+        algCfg.PIBBCfg.variance_at_switching = 0.012
+        algCfg.PIBBCfg.boost_first_switching_noise = 1.
 
     return algCfg
 
@@ -286,16 +294,20 @@ reward_list = {
 }
 
 n_kernels = 20
-variance = 0.027
-decay = 0.9965
 h = 10
-noise_boost = 1.75
 
 if RECOVER_CPG:
     decay = 0.8
     variance = 0.003
     noise_boost = 0.9
-
+elif CURRICULUM_CPG_RBFN:
+    decay = 0.9965
+    variance = 0.027
+    noise_boost = 1.75
+else:
+    variance = 0.027
+    decay = 0.9965
+    noise_boost = 1.75
 
 dt = 0.005
 seconds_iteration = 5 / 2
@@ -308,12 +320,15 @@ show_final_graph = True
 # encoding = "indirect"
 encoding = "direct"
 
+if CURRICULUM_CPG_RBFN:
+    encoding = "indirect"
+
 actions_scale = 0.2
 hip_scale = 0.2
 
 hyperparam = {
     "NIN": 1,
-    "NSTATE": 20,
+    "NSTATE": n_kernels,
     "MOTORS_LEG": 3,
     "NLEG": 4,
     "TINIT": 1000,
