@@ -116,7 +116,7 @@ class CPGRBFN(torchNet):
 
         self.__encoding = key_direct
 
-        previous_w = self.mn.W.detach().copy()
+        previous_w = self.mn.W.detach().clone()
         self.dic_converter[key_direct]()
         self.__hyperparams["n_out"] = self.__n_out
         self.__hyperparams["encoding"] = self.__encoding

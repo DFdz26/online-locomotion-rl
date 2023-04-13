@@ -90,7 +90,7 @@ def config_learning_curriculum():
 
     if CURRICULUM_CPG_RBFN and not RECOVER_CPG:
         algCfg.PIBBCfg.switching_indirect_to_direct = True
-        algCfg.PIBBCfg.threshold_switching = 150
+        algCfg.PIBBCfg.threshold_switching = 100
         algCfg.PIBBCfg.decay_at_switching = 0.992
         algCfg.PIBBCfg.variance_at_switching = 0.012
         algCfg.PIBBCfg.boost_first_switching_noise = 1.
@@ -179,7 +179,7 @@ def config_env():
 
 reward_list = {
     "x_distance": {
-        "weight": 2.2,
+        "weight": 2.2 * 1,
         "reward_data": {
             "absolute_distance": False
         }
@@ -273,7 +273,7 @@ reward_list = {
     },
 
     "x_velocity": {
-        "weight": 1.,
+        "weight": 1. * 2,
         "reward_data": {
             "exponential": False,
             "weight": 0.178  # 0.177
@@ -301,7 +301,7 @@ if RECOVER_CPG:
     variance = 0.003
     noise_boost = 0.9
 elif CURRICULUM_CPG_RBFN:
-    decay = 0.9965
+    decay = 0.992
     variance = 0.027
     noise_boost = 1.75
 else:
@@ -370,7 +370,7 @@ actorArgs = NNCreatorArgs()
 actorArgs.inputs = [45 + latent_space_size]
 # actorArgs.hidden_dim = [128, 64]
 actorArgs.hidden_dim = [256, 128]
-actorArgs.outputs = [n_out]
+actorArgs.outputs = [n_out if not CURRICULUM_CPG_RBFN else 12]
 
 criticArgs = NNCreatorArgs()
 criticArgs.inputs = [45 + latent_space_size]
@@ -410,7 +410,7 @@ if RECOVER_CPG:
     learning_algorithm.read_data_point(cpg_filename, logger, policy, recover_MLP=False)
 
 
-robot = Runner(policy, learning_algorithm, logger, config_file, env_config, reward_obj, n_out,
+robot = Runner(policy, learning_algorithm, logger, config_file, env_config, reward_obj, n_out if not CURRICULUM_CPG_RBFN else 12,
                terrain_obj, curricula=curricula, verbose=True, store_observations=True)
 
 try:

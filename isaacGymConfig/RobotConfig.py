@@ -614,7 +614,7 @@ class RobotConfig(BaseConfiguration):
 
         if n_terrains > len(self.envs_with_camera):
             self.cameras_take_frame = len(self.envs_with_camera)
-            desired_terrains = terrains_to_record[:-self.cameras_take_frame]
+            desired_terrains = terrains_to_record[-self.cameras_take_frame :]
         else:
             desired_terrains = terrains_to_record
             self.cameras_take_frame = n_terrains
