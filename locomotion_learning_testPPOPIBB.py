@@ -317,11 +317,11 @@ step_env = int(seconds_iteration / 0.01)
 
 show_final_graph = True
 
-# encoding = "indirect"
-encoding = "direct"
-
 if CURRICULUM_CPG_RBFN:
     encoding = "indirect"
+else:
+    # encoding = "indirect"
+    encoding = "direct"
 
 actions_scale = 0.2
 hip_scale = 0.2
