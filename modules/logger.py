@@ -186,7 +186,7 @@ class Logger:
 
         for video_saver in self.video_saver:
             filename = video_saver.filename + "_" + str(self.iteration)
-            video_saver.save_video(filename)
+            video_saver.save_video(filename, self.save_data)
 
         self.all_buffer_video_full = False
         self.record_in_progress = False

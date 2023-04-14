@@ -94,6 +94,7 @@ def config_learning_curriculum():
         algCfg.PIBBCfg.decay_at_switching = 0.992
         algCfg.PIBBCfg.variance_at_switching = 0.012
         algCfg.PIBBCfg.boost_first_switching_noise = 1.
+        algCfg.PIBBCfg.change_RW_scales_when_switching = True
 
     return algCfg
 
@@ -386,7 +387,7 @@ n_out = cpg_rbf_nn.get_n_outputs()
 print(f"n_out: {n_out}")
 
 latent_space_size = 12
-priv_obs = 17
+priv_obs = 21
 
 actorArgs = NNCreatorArgs()
 # actorArgs.inputs = [39]
@@ -422,7 +423,8 @@ config_camera(ACTIVE_RECORDING_CAMERA, env_config, logger, step_env, int(1/0.01)
 
 terrain_obj, terrain_curr = config_terrain(env_config)
 alg_curr = config_learning_curriculum()
-curricula = Curriculum(rollouts, device=device, terrain_config=terrain_curr, algorithm_config=alg_curr)
+rad_curr = config_randomization_curriculum()
+curricula = Curriculum(rollouts, device=device, terrain_config=terrain_curr, algorithm_config=alg_curr, randomization_config=rad_curr)
 logged = False
 
 policy = MLP_CPG(actorCritic, cpg_rbf_nn)

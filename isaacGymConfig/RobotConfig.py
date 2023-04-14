@@ -437,8 +437,11 @@ class RobotConfig(BaseConfiguration):
 
         kp_aux, kd_aux, mnotor_strength_aux = self.curricula.get_randomized_motor_properties(self.num_envs)
 
+        
+
         if not(mnotor_strength_aux is None):
-            self.motor_strengths = mnotor_strength_aux.detach().clone()
+
+            self.motor_strengths = mnotor_strength_aux.squeeze().detach().clone()
             self.motor_strengths = torch.add(torch.div(self.motor_strengths, 100), 1.)
 
     def __prepare_sim(self):
@@ -473,7 +476,7 @@ class RobotConfig(BaseConfiguration):
             torques = self.p_gains * self.controller_error - self.d_gains * self.dof_vel
 
             if not(self.curricula is None):
-                torques = torch.multiply(torques, self.motor_strengths)
+                torques = torques * self.motor_strengths.unsqueeze(1)
 
         self.torques = torques
 
@@ -624,11 +627,11 @@ class RobotConfig(BaseConfiguration):
             motor_strengths_scale, motor_strengths_shift = scales_shift["motor_strengths"]
 
             randomized_obs = torch.cat(
-                ((self.friction_coeffs - friction_coeffs_shift) * friction_coeffs_scale,  # friction coeff
-                 (self.restitutions - restitutions_shift) * restitutions_scale,  # friction coeff
-                 (self.payloads - payloads_shift) * payloads_scale,  # payload
-                 (self.motor_strengths - motor_strengths_shift) * motor_strengths_scale,  # motor strength
-                 ), dim=1)
+                ((self.friction_coeffs - friction_coeffs_shift).unsqueeze(1) * friction_coeffs_scale,  # friction coeff
+                 (self.restitutions - restitutions_shift).unsqueeze(1) * restitutions_scale,  # friction coeff
+                 (self.payloads - payloads_shift).unsqueeze(1) * payloads_scale,  # payload
+                 (self.motor_strengths - motor_strengths_shift).unsqueeze(1) * motor_strengths_scale,  # motor strength
+                 ), dim=-1)
 
             expert = torch.cat((
                 randomized_obs,
@@ -810,15 +813,19 @@ class RobotConfig(BaseConfiguration):
         self.upper_limit_safe = (self.mids + self.upper_limit_cuda) * 0.5
         self.lower_limit_safe = (self.mids + self.lower_limit_cuda) * 0.5
 
-        self.motor_strengths = torch.ones(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
-        self.payloads = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
-        self.restitutions = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
-        self.friction_coeffs = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
+        self.friction_coeffs = self.default_friction * torch.ones(self.num_envs, dtype=torch.float, device=self.device,
+                                                                  requires_grad=False)
+        self.restitutions = self.default_restitution * torch.ones(self.num_envs, dtype=torch.float, device=self.device,
+                                                                  requires_grad=False)
+        self.payloads = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+
+        self.motor_strengths = torch.ones(self.num_envs, dtype=torch.float, device=self.device,
+                                          requires_grad=False)
+        
+        self.restitutions_default = self.restitutions.detach().clone()
+        self.friction_coeffs_default = self.friction_coeffs.detach().clone()
 
         self.__get_body_randomization_information(True)
-
-        self.restitutions_default = self.default_restitution * torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
-        self.friction_coeffs_default = self.default_friction * torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
 
         default_dof_state = np.zeros(self.num_dof, gymapi.DofState.dtype)
         # default_dof_state["pos"] = self.mids

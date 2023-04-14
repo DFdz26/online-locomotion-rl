@@ -53,7 +53,7 @@ class VideoSaver:
             if self.n_stored_frames == self.n_tot_frames:
                 self.buffer_full = True
 
-    def save_video(self, filename=None):
+    def save_video(self, filename=None, saveFile=True):
 
         if self.started_record:
             filename = self.filename if filename is None else filename
@@ -69,7 +69,8 @@ class VideoSaver:
                 frames.append(img)
 
             # Write the frames to a video file using imageio
-            imageio.mimwrite(filename, frames, fps=self.fps)
+            if saveFile:
+                imageio.mimwrite(filename, frames, fps=self.fps)
 
             self.stop_record()
 

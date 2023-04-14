@@ -21,7 +21,7 @@ class PPOArgs:
     # value_loss_coef = 1000.  # 1500
     value_loss_coef = 300.  # 1500
     clip_param = 0.2
-    entropy_coef = 0.0008
+    entropy_coef = 0.005
     num_learning_epochs = 2  # 5
     num_mini_batches = 1400  # mini batch size = num_envs*nsteps / nminibatches 400
     # num_mini_batches = 400  # mini batch size = num_envs*nsteps / nminibatches
@@ -45,6 +45,8 @@ class PPOArgs:
     # min_clipped_learning_rate = 5.e-6
     min_clipped_learning_rate = 0.000008
     # min_clipped_learning_rate = 1.e-5
+
+    clipped_values = True
 
 
 class PPO:
@@ -227,7 +229,15 @@ class PPO:
             surrogate_loss = torch.max(surrogate, surrogate_clipped).mean()
 
             # Value function loss
-            value_loss = (returns_batch - value_batch).pow(2).mean()
+            if PPOArgs.clipped_values:
+                value_clipped = target_values_batch + \
+                (value_batch - target_values_batch).clamp(-PPOArgs.clip_param,
+                                                            PPOArgs.clip_param)
+                value_losses = (value_batch - returns_batch).pow(2)
+                value_losses_clipped = (value_clipped - returns_batch).pow(2)
+                value_loss = torch.max(value_losses, value_losses_clipped).mean()
+            else:
+                value_loss = (returns_batch - value_batch).pow(2).mean()
 
             loss = surrogate_loss + PPOArgs.value_loss_coef * value_loss - PPOArgs.entropy_coef * entropy_batch.mean()
             # loss = -loss

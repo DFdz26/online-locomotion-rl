@@ -113,9 +113,6 @@ class RandomizationCurriculum:
             "kd": [0., 0.],
         }
 
-        self.range_changed = False
-        self.scales_shift = scales_shift
-
         motor_param = self.cfg.MotorParameters
         model_param = self.cfg.ModelParameters
 
@@ -136,15 +133,20 @@ class RandomizationCurriculum:
                                                 default_motor_strength, percentage=True)
             scales_shift["motor_strengths"] = self._get_scale_shift_ind(total_range)
 
-        if len(self.kd_range):
-            # TODO: Default kd is actually an array or tensor of max size 3
-            total_range = self._get_total_range(motor_param.percentage_kd_range * default_kd)
-            scales_shift["kd"] = self._get_scale_shift_ind(total_range)
+        # if not(self.kd_range is []):
+        #     # TODO: Default kd is actually an array or tensor of max size 3
+        #     total_range = self._get_total_range(motor_param.percentage_kd_range * default_kd)
+        #     scales_shift["kd"] = self._get_scale_shift_ind(total_range)
 
-        if len(self.kp_range):
-            # TODO: Default kp is actually an array or tensor of max size 3
-            total_range = self._get_total_range(motor_param.percentage_kp_range * default_kp)
-            scales_shift["kp"] = self._get_scale_shift_ind(total_range)
+        # if not(self.kp_range is []):
+        #     # TODO: Default kp is actually an array or tensor of max size 3
+        #     total_range = self._get_total_range(motor_param.percentage_kp_range * default_kp)
+        #     scales_shift["kp"] = self._get_scale_shift_ind(total_range)
+
+        self.range_changed = False
+        self.scales_shift = scales_shift
+
+        return self.scales_shift
 
     def _check_number_in_range(self, _current_number, _limits, _step, add):
         in_limits = True
@@ -254,16 +256,15 @@ class RandomizationCurriculum:
         if not self.started:
             return kp_, kd_, motor_strengths_
 
-        if not (self.kp_range is []):
-            kp_ = self._generate_random_tensor(self.kp_range, num_envs, self.device, unsqueeze=True)
+        # if not (self.kp_range is []):
+        #     kp_ = self._generate_random_tensor(self.kp_range, num_envs, self.device, unsqueeze=True)
 
-        if not (self.kd_range is []):
-            kd_ = self._generate_random_tensor(self.kd_range, num_envs, self.device, unsqueeze=True)
+        # if not (self.kd_range is []):
+        #     kd_ = self._generate_random_tensor(self.kd_range, num_envs, self.device, unsqueeze=True)
 
         if not (self.motor_strength_range is []):
             motor_strengths_ = self._generate_random_tensor(self.motor_strength_range, num_envs, self.device,
                                                             unsqueeze=True)
-
         return kp_, kd_, motor_strengths_
 
     def _increase_range_process(self):
@@ -351,7 +352,7 @@ class AlgorithmCurrCfg:
         threshold = 350
 
         switching_indirect_to_direct = False
-        change_RW_scales_when_switching = False
+        change_RW_scales_when_switching = True
         control_switching_direct = "iterations"
         threshold_switching = 50
 
