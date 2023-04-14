@@ -133,9 +133,13 @@ class Runner:
             if (i + 1) != iterations:
                 # In case of having curriculum, update it
                 if not (self.curricula is None):
-                    steps_per_iteration = self.curricula.set_control_parameters(i, final_reward, None,
-                                                                                self.rewards, self.learning_algorithm,
-                                                                                steps_per_iteration)
+                    aux = self.curricula.set_control_parameters(i, final_reward, None,
+                                                                self.rewards, self.learning_algorithm,
+                                                                steps_per_iteration)
+                    steps_per_iteration, update_randomization, started_randomization = aux
+
+                    self.agents.activate_randomization()
+                    self.agents.get_new_randomization()
 
                 # Reset the environments, the reward buffers and get the first observation
                 self.rewards.clean_buffers()

@@ -73,6 +73,7 @@ class RobotConfig(BaseConfiguration):
         self.starting_rollout_time = 0
 
         self.actual_time = 0
+        self.randomization_activated = False
 
         super().__init__(self.cfg, self.env_config.dt)
         torch._C._jit_set_profiling_mode(False)
@@ -130,6 +131,9 @@ class RobotConfig(BaseConfiguration):
 
     def compute_env_distance(self):
         return self.root_states[:, :3] - self.init_root_state[:, :3]
+
+    def activate_randomization(self):
+        self.randomization_activated = True
 
     def get_asset_name(self):
         return self.asset_name
@@ -402,6 +406,41 @@ class RobotConfig(BaseConfiguration):
         self.__prepare_distance_and_termination_rollout_buffers_()
         self.rewards.prepare_buffers()
 
+    def __get_body_randomization_information(self, get_mass):
+        if self.curricula is None:
+            return None
+
+        if not self.curricula.randomization_available():
+            return None
+
+        fri_aux, res_aux, payload_aux = self.curricula.get_randomized_body_properties(self.num_envs,
+                                                                                      include_mass=get_mass)
+
+        if not(res_aux is None):
+            self.restitutions = fri_aux.detach().clone()
+
+        if not(fri_aux is None):
+            self.friction_coeffs = fri_aux.detach().clone()
+
+        if not(payload_aux is None):
+            self.payloads = payload_aux.detach().clone()
+
+    def get_new_randomization(self):
+        self.__get_motors_randomization_information()
+
+    def __get_motors_randomization_information(self):
+        if self.curricula is None:
+            return None
+
+        if not self.curricula.randomization_available():
+            return None
+
+        kp_aux, kd_aux, mnotor_strength_aux = self.curricula.get_randomized_motor_properties(self.num_envs)
+
+        if not(mnotor_strength_aux is None):
+            self.motor_strengths = mnotor_strength_aux.detach().clone()
+            self.motor_strengths = torch.add(torch.div(self.motor_strengths, 100), 1.)
+
     def __prepare_sim(self):
         self.gym.prepare_sim(self.sim)
 
@@ -432,6 +471,9 @@ class RobotConfig(BaseConfiguration):
             self.controller_error = (self.desired_config - self.dof_pos)
 
             torques = self.p_gains * self.controller_error - self.d_gains * self.dof_vel
+
+            if not(self.curricula is None):
+                torques = torch.multiply(torques, self.motor_strengths)
 
         self.torques = torques
 
@@ -559,7 +601,6 @@ class RobotConfig(BaseConfiguration):
         #     dim=-1
         # )
 
-        # expert = in_contact
         expert = torch.cat((
             contact_forces[:, :, 0],
             contact_forces[:, :, 1],
@@ -568,6 +609,33 @@ class RobotConfig(BaseConfiguration):
             in_contact),
             dim=-1
         )
+
+        # scale all the randomization from -1 to 1
+        scales_shift = None
+
+        if not (self.curricula is None):
+            scales_shift = self.curricula.get_scales_shift_randomized_parameters(default_motor_strength=1.)
+
+        if not (scales_shift is None):
+            # scale all the randomization from -1 to 1
+            friction_coeffs_scale, friction_coeffs_shift = scales_shift["friction"]
+            restitutions_scale, restitutions_shift = scales_shift["restitutions"]
+            payloads_scale, payloads_shift = scales_shift["payloads"]
+            motor_strengths_scale, motor_strengths_shift = scales_shift["motor_strengths"]
+
+            randomized_obs = torch.cat(
+                ((self.friction_coeffs - friction_coeffs_shift) * friction_coeffs_scale,  # friction coeff
+                 (self.restitutions - restitutions_shift) * restitutions_scale,  # friction coeff
+                 (self.payloads - payloads_shift) * payloads_scale,  # payload
+                 (self.motor_strengths - motor_strengths_shift) * motor_strengths_scale,  # motor strength
+                 ), dim=1)
+
+            expert = torch.cat((
+                randomized_obs,
+                expert
+            ), dim=-1)
+
+        # expert = in_contact
 
         expert = torch.clip(expert, -self.env_config.clip_observations, self.env_config.clip_observations)
 
@@ -614,7 +682,7 @@ class RobotConfig(BaseConfiguration):
 
         if n_terrains > len(self.envs_with_camera):
             self.cameras_take_frame = len(self.envs_with_camera)
-            desired_terrains = terrains_to_record[-self.cameras_take_frame :]
+            desired_terrains = terrains_to_record[-self.cameras_take_frame:]
         else:
             desired_terrains = terrains_to_record
             self.cameras_take_frame = n_terrains
@@ -640,12 +708,13 @@ class RobotConfig(BaseConfiguration):
         return frames
 
     def _get_frame_individual_camera(self, camera, selected_env):
-        bx, by, bz = self.root_states[selected_env, 0], self.root_states[selected_env, 1], self.root_states[selected_env, 2]
+        bx, by, bz = self.root_states[selected_env, 0], self.root_states[selected_env, 1], self.root_states[
+            selected_env, 2]
         self.gym.set_camera_location(camera, self.envs[selected_env], gymapi.Vec3(bx, by - 1.0, bz + 1.0),
                                      gymapi.Vec3(bx, by, bz))
         frame = self.gym.get_camera_image(self.sim, self.envs[selected_env], camera, gymapi.IMAGE_COLOR)
         frame = frame.reshape((self.camera_settings.height, self.camera_settings.width, 4))
-        
+
         return frame
 
     def __create_camera(self):
@@ -702,6 +771,7 @@ class RobotConfig(BaseConfiguration):
         self.dof_prop_assets = self.gym.get_asset_dof_properties(self.robot_assets)
         self.rigid_shape_assets = self.gym.get_asset_rigid_shape_properties(self.robot_assets)
         self.dof_names = self.gym.get_asset_dof_names(self.robot_assets)
+        rigid_shape_props_asset = self.gym.get_asset_rigid_shape_properties(self.robot_assets)
 
         self.default_dof_pos = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
         for i in range(self.num_dof):
@@ -712,9 +782,13 @@ class RobotConfig(BaseConfiguration):
         self.lower_limit = self.dof_prop_assets['lower']
 
         self.upper_limit = self.dof_prop_assets['upper']
+        self.default_friction = rigid_shape_props_asset[1].friction
+        self.default_restitution = rigid_shape_props_asset[1].restitution
 
     def _process_rigid_body_props(self, body_prop, n_env):
-        # TODO: Changing the mass of the robot
+        self.default_body_mass = body_prop[0].mass
+
+        body_prop[0].mass = self.default_body_mass + self.payloads[n_env]
 
         return body_prop
 
@@ -735,6 +809,16 @@ class RobotConfig(BaseConfiguration):
         self.upper_limit_cuda = torch.from_numpy(self.upper_limit).to(self.device)
         self.upper_limit_safe = (self.mids + self.upper_limit_cuda) * 0.5
         self.lower_limit_safe = (self.mids + self.lower_limit_cuda) * 0.5
+
+        self.motor_strengths = torch.ones(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
+        self.payloads = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
+        self.restitutions = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
+        self.friction_coeffs = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
+
+        self.__get_body_randomization_information(True)
+
+        self.restitutions_default = self.default_restitution * torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
+        self.friction_coeffs_default = self.default_friction * torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
 
         default_dof_state = np.zeros(self.num_dof, gymapi.DofState.dtype)
         # default_dof_state["pos"] = self.mids

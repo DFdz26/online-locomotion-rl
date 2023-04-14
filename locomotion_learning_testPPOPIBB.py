@@ -22,7 +22,7 @@ from learningAlgorithm.PIBB.PIBB import PIBB
 from learningAlgorithm.CPG_MLP import MLP_CPG
 from learningAlgorithm.CPG_MLP import PPO_PIBB
 from isaacGymConfig.TerrainConfig import Terrain, TerrainComCfg
-from isaacGymConfig.Curriculum import Curriculum, TerrainCurrCfg, AlgorithmCurrCfg
+from isaacGymConfig.Curriculum import Curriculum, TerrainCurrCfg, AlgorithmCurrCfg, RandomizationCurrCfg
 
 config_file = "models/configs/config_minicheeta.json"
 graph_name = "graph_minicheeta_learning"
@@ -98,6 +98,29 @@ def config_learning_curriculum():
     return algCfg
 
 
+def config_randomization_curriculum():
+    randCurrCfg = RandomizationCurrCfg()
+
+    randCurrCfg.MotorParameters.randomize_motor_strength = True
+    randCurrCfg.MotorParameters.step_randomization_motor = 0.
+
+    randCurrCfg.ModelParameters.randomize_payload = True
+    randCurrCfg.ModelParameters.step_randomization_payload = 0.
+
+    randCurrCfg.ModelParameters.randomize_friction = True
+    randCurrCfg.ModelParameters.step_randomization_friction = 0.
+
+    randCurrCfg.ModelParameters.randomize_restitution = True
+    randCurrCfg.ModelParameters.step_randomization_restitution = 0.
+
+    randCurrCfg.Control.randomization_activated = True
+    randCurrCfg.Control.generate_first_randomization = True
+    randCurrCfg.Control.start_randomization_iteration = 370
+    randCurrCfg.Control.randomization_interval_iterations = 3
+
+    return randCurrCfg
+
+
 def config_terrain(env_config):
     list_terrains = [
         {
@@ -155,9 +178,9 @@ def config_terrain(env_config):
 
         curriculum_terr.object = terrain_obj
         first_curr = start_PPO_acting_iteration + 70
-        second_curr = start_PPO_acting_iteration + 250
-        third_curr = start_PPO_acting_iteration + 450
-        fourth_curr = start_PPO_acting_iteration + 750
+        second_curr = start_PPO_acting_iteration + 150
+        third_curr = start_PPO_acting_iteration + 151
+        fourth_curr = start_PPO_acting_iteration + 700
         fifth_curr = start_PPO_acting_iteration + 1750
         curriculum_terr.Control.threshold = [first_curr, second_curr, third_curr, fourth_curr, fifth_curr]
         curriculum_terr.percentage_step = 0.32

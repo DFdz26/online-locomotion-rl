@@ -28,30 +28,294 @@ type_curriculums = [
 
 
 class RandomizationCurrCfg:
-    name_type = "randomization"
-
     class MotorParameters:
-        percentage_kp_noise = [0, 20]
-        step_noise_kp = 1
+        randomize_kp_activated = False
+        percentage_kp_range = [[-10, -1], [1, 20]]
+        step_randomization_kp = 1
 
-        percentage_kd_noise = [0, 20]
-        step_noise_kd = 1
+        randomize_kd_activated = False
+        percentage_kd_range = [[-10, -1], [1, 20]]
+        step_randomization_kd = 1
 
-        percentage_motor_strength = [0, 10]
-        step_noise_motor = 1
+        randomize_motor_strength = False
+        percentage_motor_strength_range = [[-10, -1], [1, 10]]
+        step_randomization_motor = 1
 
     class ModelParameters:
-        percentage_mass_noise = [0, 10]
-        percentage_com_noise = [0, 10]
+        randomize_payload = False
+        payload_range = [[-1, -1], [1, 3]]
+        step_randomization_payload = 1
 
-    class Observations:
-        percentage_observation_noise = [0, 10]
-        step_noise_observation = 1
+        randomize_friction = False
+        friction_range = [[-1, -1], [1, 3]]
+        step_randomization_friction = 1
+
+        randomize_restitution = False
+        restitution_range = [[0., 0.], [0., 1.0]]
+        step_randomization_restitution = 0.1
 
     class Control:
-        threshold = None
-        steps = 0.
-        type = "iterations"
+        randomization_activated = False
+        generate_first_randomization = False
+
+        increase_range_step = 0
+        start_randomization_iteration = 360
+
+        randomization_interval_iterations = 4
+
+
+class RandomizationCurriculum:
+    def __init__(self, device, cfg: RandomizationCurrCfg):
+        self.device = device
+        self.cfg = cfg
+
+        self.updates = 0
+        self.iteration = 0
+
+        self.randomization_activated = cfg.Control.randomization_activated
+        self.starting_iteration = cfg.Control.start_randomization_iteration
+        self.randomization_interval = cfg.Control.randomization_interval_iterations
+
+        self.started = False
+        self.range_changed = True
+        self.first_iteration = self.cfg.Control.generate_first_randomization
+
+        self._set_up_ranges()
+        self.scales_shift = {}
+
+    @staticmethod
+    def _get_scale_shift_ind(_range):
+        _scale = 2. / (_range[1] - _range[0])
+        shift = (_range[1] + _range[0]) / 2.
+        return _scale, shift
+
+    @staticmethod
+    def _get_total_range(_total_range, default_value=1., percentage=False):
+        _min = _total_range[0][0]
+        _max = _total_range[1][1]
+
+        if percentage:
+            _min = default_value * (1 + _min/100)
+            _max = default_value * (1 + _max/100)
+
+        return [_min, _max]
+
+    def get_scales_shift(self, default_motor_strength=1., default_kp=None, default_kd=None):
+        if not self.range_changed:
+            return self.scales_shift
+
+        scales_shift = {
+            "friction": [0., 0.],
+            "restitutions": [0., 0.],
+            "payloads": [0., 0.],
+            "motor_strengths": [0., 0.],
+            "kp": [0., 0.],
+            "kd": [0., 0.],
+        }
+
+        self.range_changed = False
+        self.scales_shift = scales_shift
+
+        motor_param = self.cfg.MotorParameters
+        model_param = self.cfg.ModelParameters
+
+        if len(self.friction_range):
+            total_range = self._get_total_range(model_param.friction_range)
+            scales_shift["friction"] = self._get_scale_shift_ind(total_range)
+
+        if len(self.restitution_range):
+            total_range = self._get_total_range(model_param.restitution_range)
+            scales_shift["restitutions"] = self._get_scale_shift_ind(total_range)
+
+        if len(self.payload_range):
+            total_range = self._get_total_range(model_param.payload_range)
+            scales_shift["payloads"] = self._get_scale_shift_ind(total_range)
+
+        if len(self.motor_strength_range):
+            total_range = self._get_total_range(motor_param.percentage_motor_strength_range,
+                                                default_motor_strength, percentage=True)
+            scales_shift["motor_strengths"] = self._get_scale_shift_ind(total_range)
+
+        if len(self.kd_range):
+            # TODO: Default kd is actually an array or tensor of max size 3
+            total_range = self._get_total_range(motor_param.percentage_kd_range * default_kd)
+            scales_shift["kd"] = self._get_scale_shift_ind(total_range)
+
+        if len(self.kp_range):
+            # TODO: Default kp is actually an array or tensor of max size 3
+            total_range = self._get_total_range(motor_param.percentage_kp_range * default_kp)
+            scales_shift["kp"] = self._get_scale_shift_ind(total_range)
+
+    def _check_number_in_range(self, _current_number, _limits, _step, add):
+        in_limits = True
+        _current_number += int(add) * _step - int(not add) * _step
+
+        if _current_number < _limits[0]:
+            _current_number = _limits[0]
+            in_limits = False
+
+        elif _current_number > _limits[1]:
+            _current_number = _limits[1]
+            in_limits = False
+
+        self.range_changed = self.range_changed or in_limits
+
+        return _current_number
+
+    def _increase_range(self, _current_range, _settings_limits, _step):
+        if math.ceil(_step) == 0 or _current_range is []:
+            return _current_range
+
+        for i in range(len(_current_range)):
+            _current_range[i] = self._check_number_in_range(_current_range[i], _settings_limits[i], _step, i == 1)
+
+        return _current_range
+
+    @staticmethod
+    def _set_up_static_or_dynamic_range(_range, _step):
+
+        if math.ceil(_step) == 0:
+            result = [
+                _range[0][0],
+                _range[1][1]
+            ]
+        else:
+            result = [
+                _range[0][1],
+                _range[1][0],
+            ]
+
+        return result
+
+    def _set_up_ranges(self):
+        model_parameters = self.cfg.ModelParameters
+        self.friction_range = [] if not model_parameters.randomize_friction else \
+            self._set_up_static_or_dynamic_range(model_parameters.friction_range,
+                                                 model_parameters.step_randomization_friction)
+
+        self.payload_range = [] if not model_parameters.randomize_payload else \
+            self._set_up_static_or_dynamic_range(model_parameters.payload_range,
+                                                 model_parameters.step_randomization_payload)
+
+        self.restitution_range = [] if not model_parameters.randomize_restitution else \
+            self._set_up_static_or_dynamic_range(model_parameters.restitution_range,
+                                                 model_parameters.step_randomization_restitution)
+
+        motor_parameters = self.cfg.MotorParameters
+
+        self.motor_strength_range = [] if not motor_parameters.randomize_motor_strength else \
+            self._set_up_static_or_dynamic_range(motor_parameters.percentage_motor_strength_range,
+                                                 motor_parameters.step_randomization_motor)
+
+        self.kd_range = [] if not motor_parameters.randomize_kd_activated else \
+            self._set_up_static_or_dynamic_range(motor_parameters.percentage_kd_range,
+                                                 motor_parameters.step_randomization_kd)
+
+        self.kp_range = [] if not motor_parameters.randomize_kp_activated else \
+            self._set_up_static_or_dynamic_range(motor_parameters.percentage_kp_range,
+                                                 motor_parameters.step_randomization_kp)
+
+    @staticmethod
+    def _generate_random_tensor(_range, _len, _device, unsqueeze=False):
+        _max, _min = _range
+        rand_numbers = torch.rand(_len, dtype=torch.float, device=_device, requires_grad=False)
+
+        if unsqueeze:
+            rand_numbers = rand_numbers.unsqueeze(1)
+
+        return rand_numbers * (_max - _min) + _min
+
+    def get_model_parameters_randomized(self, num_envs, generate_mass=True):
+        friction_ = None
+        restitution_ = None
+        mass_ = None
+
+        if not self.started and not self.first_iteration:
+            return friction_, restitution_, mass_
+
+        self.first_iteration = False
+
+        if not (self.friction_range is []):
+            friction_ = self._generate_random_tensor(self.friction_range, num_envs, self.device)
+
+        if not (self.payload_range is []) and generate_mass:
+            mass_ = self._generate_random_tensor(self.payload_range, num_envs, self.device)
+
+        if not (self.restitution_range is []):
+            restitution_ = self._generate_random_tensor(self.restitution_range, num_envs, self.device)
+
+        return friction_, restitution_, mass_
+
+    def get_motor_parameters_randomized(self, num_envs):
+        kp_ = None
+        kd_ = None
+        motor_strengths_ = None
+
+        if not self.started:
+            return kp_, kd_, motor_strengths_
+
+        if not (self.kp_range is []):
+            kp_ = self._generate_random_tensor(self.kp_range, num_envs, self.device, unsqueeze=True)
+
+        if not (self.kd_range is []):
+            kd_ = self._generate_random_tensor(self.kd_range, num_envs, self.device, unsqueeze=True)
+
+        if not (self.motor_strength_range is []):
+            motor_strengths_ = self._generate_random_tensor(self.motor_strength_range, num_envs, self.device,
+                                                            unsqueeze=True)
+
+        return kp_, kd_, motor_strengths_
+
+    def _increase_range_process(self):
+        model_parameters = self.cfg.ModelParameters
+        motor_parameters = self.cfg.MotorParameters
+
+        self.motor_strength_range = self._increase_range(self.motor_strength_range,
+                                                         motor_parameters.percentage_motor_strength_range,
+                                                         motor_parameters.step_randomization_motor)
+
+        self.kd_range = self._increase_range(self.kd_range,
+                                             motor_parameters.percentage_kd_range,
+                                             motor_parameters.step_randomization_kd)
+
+        self.kp_range = self._increase_range(self.kp_range,
+                                             motor_parameters.percentage_kp_range,
+                                             motor_parameters.step_randomization_kp)
+
+        self.payload_range = self._increase_range(self.payload_range,
+                                                  model_parameters.payload_range,
+                                                  model_parameters.step_randomization_payload)
+
+        self.restitution_range = self._increase_range(self.restitution_range,
+                                                      model_parameters.restitution_range,
+                                                      model_parameters.step_randomization_restitution)
+
+        self.friction_range = self._increase_range(self.friction_range,
+                                                   model_parameters.friction_range,
+                                                   model_parameters.step_randomization_friction)
+
+    def set_control_parameters(self, iterations):
+        if not self.randomization_activated:
+            return False, False
+
+        self.iteration = iterations
+        activated = False
+
+        if self.started:
+            self.updates += 1
+
+        if self.started and self.cfg.Control.increase_range_step:
+            if self.updates % self.cfg.Control.increase_range_step:
+                self._increase_range_process()
+
+        if not self.started and self.starting_iteration == iterations:
+            self.started = True
+            activated = True
+
+        if self.started and self.updates % self.cfg.Control.randomization_interval_iterations == 0:
+            return True, activated
+
+        return False, False
 
 
 class TerrainCurrCfg:
@@ -87,6 +351,7 @@ class AlgorithmCurrCfg:
         threshold = 350
 
         switching_indirect_to_direct = False
+        change_RW_scales_when_switching = False
         control_switching_direct = "iterations"
         threshold_switching = 50
 
@@ -147,9 +412,17 @@ class AlgorithmCurriculum:
 
         RewardObj.change_rewards(rw_weights)
 
-    def _change_indirect_to_direct(self, learningObj):
+    def _change_indirect_to_direct(self, learningObj, rewardObj):
         # Make sure it only happens once
         self.switching_CPG_RBFN = False
+
+        if self.cfg.PIBBCfg.change_RW_scales_when_switching:
+            rw_weights = rewardObj.get_rewards()
+
+            rw_weights["yaw_vel"]["weight"] *= 1.5
+            rw_weights["x_velocity"]["weight"] /= 1.3
+
+            rewardObj.change_rewards(rw_weights)
 
         # Modify the rbfn - motor neuron connections and copying the learnt weights so far
         CPG_RBFN = learningObj.PIBB.policy
@@ -182,7 +455,7 @@ class AlgorithmCurriculum:
         self.iteration = iterations
 
         if self.switching_CPG_RBFN and self.iteration == self.cfg.PIBBCfg.threshold_switching:
-            self._change_indirect_to_direct(learningObj)
+            self._change_indirect_to_direct(learningObj, RewardObj)
 
         if 0 < self.cfg.PPOCfg.start_iteration_learning == iterations:
             steps_per_iteration = self._start_PPO_(RewardObj, steps_per_iteration)
@@ -392,7 +665,8 @@ class Curriculum:
         self.algorithm_curriculum = None if self.algorithm_config is None else AlgorithmCurriculum(self.device,
                                                                                                    self.algorithm_config
                                                                                                    )
-        self.randomization_curriculum = None
+        self.randomization_curriculum = None if self.randomization_config is None else \
+            RandomizationCurriculum(self.device, self.randomization_config)
 
         if not (self.algorithm_curriculum is None):
             self.reduce_steps = self.algorithm_curriculum.cfg.PPOCfg.divider_initial_steps
@@ -423,24 +697,47 @@ class Curriculum:
         if not (self.algorithm_curriculum is None):
             self.algorithm_curriculum.post_step_simulation(obs, exp_obs, actions, reward, dones, info, PPO, PIBB)
 
+    def get_randomized_body_properties(self, num_envs, include_mass=True):
+        if not (self.randomization_curriculum is None):
+            return self.randomization_curriculum.get_model_parameters_randomized(num_envs, include_mass)
+
+        return None, None, None
+
+    def get_randomized_motor_properties(self, num_envs):
+        if not (self.randomization_curriculum is None):
+            return self.randomization_curriculum.get_motor_parameters_randomized(num_envs)
+
+        return None, None, None
+
+    def get_scales_shift_randomized_parameters(self, default_motor_strength=1., default_kp=None, default_kd=None):
+        if not (self.randomization_curriculum is None):
+            return self.randomization_curriculum.get_scales_shift(default_motor_strength,
+                                                                  default_kp=None, default_kd=None)
+
+        return None
+
     def set_control_parameters(self, iterations, reward, distance, RwObj, AlgObj, steps_per_iteration):
         new_steps_per_iteration = steps_per_iteration
+        randomize_properties = False
 
         if not (self.terrain_curriculum is None):
             self.terrain_curriculum.set_control_parameters(iterations, reward)
 
         if not (self.randomization_curriculum is None):
-            self.randomization_curriculum.set_control_parameters(iterations, reward)
+            randomize_properties, randomized_activated = self.randomization_curriculum.set_control_parameters(iterations)
 
         if not (self.algorithm_curriculum is None):
             new_steps_per_iteration = self.algorithm_curriculum.set_control_parameters(iterations, reward, distance,
                                                                                        RwObj, AlgObj,
                                                                                        new_steps_per_iteration)
 
-        return new_steps_per_iteration
+        return new_steps_per_iteration, randomize_properties, randomized_activated
 
     def get_terrain_curriculum(self, initial_positions):
         if self.terrain_curriculum is None:
             return initial_positions
 
         return self.terrain_curriculum.update(initial_positions)
+
+    def randomization_available(self):
+        return not (self.randomization_curriculum is None)
