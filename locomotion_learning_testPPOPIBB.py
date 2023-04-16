@@ -92,7 +92,7 @@ def config_learning_curriculum():
         algCfg.PIBBCfg.switching_indirect_to_direct = True
         algCfg.PIBBCfg.threshold_switching = 100
         algCfg.PIBBCfg.decay_at_switching = 0.992
-        algCfg.PIBBCfg.variance_at_switching = 0.012
+        algCfg.PIBBCfg.variance_at_switching = 0.009
         algCfg.PIBBCfg.boost_first_switching_noise = 1.
         algCfg.PIBBCfg.change_RW_scales_when_switching = True
 
@@ -116,7 +116,7 @@ def config_randomization_curriculum():
 
     randCurrCfg.Control.randomization_activated = True
     randCurrCfg.Control.generate_first_randomization = True
-    randCurrCfg.Control.start_randomization_iteration = 370
+    randCurrCfg.Control.start_randomization_iteration = start_PPO_acting_iteration
     randCurrCfg.Control.randomization_interval_iterations = 3
 
     return randCurrCfg
@@ -155,13 +155,13 @@ def config_terrain(env_config):
             "step": 0.03,
             "downsampled_scale": 0.5
         },
-        {
-            "terrain": "random_uniform_terrain",
-            "min_height": -0.075,
-            "max_height": 0.075,
-            "step": 0.025,
-            "downsampled_scale": 0.5
-        }
+        # {
+        #     "terrain": "random_uniform_terrain",
+        #     "min_height": -0.075,
+        #     "max_height": 0.075,
+        #     "step": 0.025,
+        #     "downsampled_scale": 0.5
+        # }
     ]
 
     terrain_com_conf = TerrainComCfg()
@@ -181,8 +181,8 @@ def config_terrain(env_config):
         first_curr = start_PPO_acting_iteration + 70
         second_curr = start_PPO_acting_iteration + 150
         third_curr = start_PPO_acting_iteration + 151
-        fourth_curr = start_PPO_acting_iteration + 700
-        fifth_curr = start_PPO_acting_iteration + 1750
+        fourth_curr = start_PPO_acting_iteration + 152  # 700
+        fifth_curr = start_PPO_acting_iteration + 500  # 1750
         curriculum_terr.Control.threshold = [first_curr, second_curr, third_curr, fourth_curr, fifth_curr]
         curriculum_terr.percentage_step = 0.32
     else:
@@ -199,6 +199,11 @@ def config_env():
     env_config.num_env_colums = num_env_colums
     env_config.render_GUI = RENDER_GUI
     env_config.iterations_without_control = iterations_without_control
+
+    env_config.cfg_observations.enable_observe_friction = False
+    env_config.cfg_observations.enable_observe_restitution = False
+    env_config.cfg_observations.enable_observe_motor_strength = True
+    env_config.cfg_observations.enable_observe_payload = True
 
 
 reward_list = {
@@ -297,7 +302,7 @@ reward_list = {
     },
 
     "x_velocity": {
-        "weight": 1. * 2,
+        "weight": 1. * 2 * 1,
         "reward_data": {
             "exponential": False,
             "weight": 0.178  # 0.177
@@ -326,7 +331,7 @@ if RECOVER_CPG:
     noise_boost = 0.9
 elif CURRICULUM_CPG_RBFN:
     decay = 0.992
-    variance = 0.027
+    variance = 0.022
     noise_boost = 1.75
 else:
     variance = 0.027
@@ -393,13 +398,14 @@ actorArgs = NNCreatorArgs()
 # actorArgs.inputs = [39]
 actorArgs.inputs = [45 + latent_space_size]
 # actorArgs.hidden_dim = [128, 64]
-actorArgs.hidden_dim = [256, 128]
+# actorArgs.hidden_dim = [256, 128]
+actorArgs.hidden_dim = [512, 256]
 actorArgs.outputs = [n_out if not CURRICULUM_CPG_RBFN else 12]
 
 criticArgs = NNCreatorArgs()
 criticArgs.inputs = [45 + latent_space_size]
 # criticArgs.hidden_dim = [128, 64]
-criticArgs.hidden_dim = [256, 128]
+criticArgs.hidden_dim = [512, 256]
 criticArgs.outputs = [1]
 
 expertArgs = NNCreatorArgs()

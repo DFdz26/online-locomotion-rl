@@ -212,10 +212,10 @@ class CPGRBFN(torchNet):
             self.outputs[self.index_aux, started_motor + 4] = normal[self.index_aux, started_motor + 4]
             self.outputs[self.index_aux, started_motor + 5] = delayed[self.index_aux, started_motor + 5]
 
-            if reversed:
-                aux_change = normal
-                normal = delayed
-                delayed = aux_change
+            # if reversed:
+            #     aux_change = normal
+            #     normal = delayed
+            #     delayed = aux_change
 
             started_motor += 6
 

@@ -605,9 +605,9 @@ class RobotConfig(BaseConfiguration):
         # )
 
         expert = torch.cat((
-            contact_forces[:, :, 0],
-            contact_forces[:, :, 1],
-            contact_forces[:, :, 2],
+            contact_forces[:, :, 0]/50 - 1,
+            contact_forces[:, :, 1]/50 - 1,
+            contact_forces[:, :, 2]/50 - 1,
             h,
             in_contact),
             dim=-1
@@ -626,11 +626,16 @@ class RobotConfig(BaseConfiguration):
             payloads_scale, payloads_shift = scales_shift["payloads"]
             motor_strengths_scale, motor_strengths_shift = scales_shift["motor_strengths"]
 
+            e_fri = self.env_config.cfg_observations.enable_observe_friction
+            e_res = self.env_config.cfg_observations.enable_observe_restitution
+            e_pay = self.env_config.cfg_observations.enable_observe_payload
+            e_mot = self.env_config.cfg_observations.enable_observe_motor_strength
+
             randomized_obs = torch.cat(
-                ((self.friction_coeffs - friction_coeffs_shift).unsqueeze(1) * friction_coeffs_scale,  # friction coeff
-                 (self.restitutions - restitutions_shift).unsqueeze(1) * restitutions_scale,  # friction coeff
-                 (self.payloads - payloads_shift).unsqueeze(1) * payloads_scale,  # payload
-                 (self.motor_strengths - motor_strengths_shift).unsqueeze(1) * motor_strengths_scale,  # motor strength
+                ((self.friction_coeffs - friction_coeffs_shift).unsqueeze(1) * friction_coeffs_scale * int(e_fri),  # friction coeff
+                 (self.restitutions - restitutions_shift).unsqueeze(1) * restitutions_scale * int(e_res),  # friction coeff
+                 (self.payloads - payloads_shift).unsqueeze(1) * payloads_scale * int(e_pay),  # payload
+                 (self.motor_strengths - motor_strengths_shift).unsqueeze(1) * motor_strengths_scale * int(e_mot),  # motor strength
                  ), dim=-1)
 
             expert = torch.cat((

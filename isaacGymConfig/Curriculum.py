@@ -494,10 +494,10 @@ class AlgorithmCurriculum:
             actions_PPO = PPO.act(observations, expert_obs, actions_mult=1.)
 
             # Scale the output to be [-2, 2]
-            for i in range(len(actions_PPO)):
-                new = [(actions_PPO[i] - torch.min(actions_PPO[i])) / (
-                        torch.max(actions_PPO[i]) - torch.min(actions_PPO[i])) - 0.5] * 4
-                actions_PPO[i] = new[0]
+            # for i in range(len(actions_PPO)):
+            #     new = [(actions_PPO[i] - torch.min(actions_PPO[i])) / (
+            #             torch.max(actions_PPO[i]) - torch.min(actions_PPO[i])) - 0.5] * 4
+            #     actions_PPO[i] = new[0]
 
             if actions is None:
                 actions = actions_PPO * self.gamma

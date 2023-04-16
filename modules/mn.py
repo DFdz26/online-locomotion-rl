@@ -106,13 +106,8 @@ class MN(torchNet):
             pickle.dump(self.W, f)
 
     def load_weights(self, nw, update_Wn=True):
-        print("aaaaaaaaaaaaa")
         self.device = 'cuda:0'
-        print(nw)
-        print(self.device)
         W_init = torch.FloatTensor(nw.to('cpu')).to(self.device)
-        print(W_init)
-        print(self.W.shape)
         self.W = torch.reshape(W_init, self.W.shape)
 
         if update_Wn:

@@ -18,8 +18,8 @@ from .Memory import Memory
 class PPOArgs:
     # value_loss_coef = 1.1
     # value_loss_coef = 150.
-    # value_loss_coef = 1000.  # 1500
-    value_loss_coef = 300.  # 1500
+    # value_loss_coef = 300.  # 1500
+    value_loss_coef = 1500.  # 1500
     clip_param = 0.2
     entropy_coef = 0.005
     num_learning_epochs = 2  # 5
@@ -31,6 +31,7 @@ class PPOArgs:
     learning_rate = 1.e-3  # 5.e-4 and 0.000000032
     # learning_rate = 0.000000012  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000015  # 5.e-4
+    # schedule = 'fixed'  # could be adaptive, fixed
     schedule = 'fixed'  # could be adaptive, fixed
     # schedule = 'adaptive'  # could be adaptive, fixed
     gamma = 0.996
@@ -47,6 +48,7 @@ class PPOArgs:
     # min_clipped_learning_rate = 1.e-5
 
     clipped_values = True
+    decay_learning_rate = 0.9992
 
 
 class PPO:
@@ -112,8 +114,8 @@ class PPO:
             self.step_simulation.observation_expert = observation_expert
             self.step_simulation.critic_observations = observation
 
-            if actions_mult != 1.0:
-                self.step_simulation.actions *= actions_mult
+            # if actions_mult != 1.0:
+            #     self.step_simulation.actions *= actions_mult
 
             return self.step_simulation.actions
 
@@ -209,6 +211,11 @@ class PPO:
                     lr_mean_tot += self.learning_rate
 
                     for param_group in self.optimizer.param_groups:
+                        param_group['lr'] = self.learning_rate
+            elif PPOArgs.schedule == 'decay':
+                self.learning_rate *= PPOArgs.decay_learning_rate
+
+                for param_group in self.optimizer.param_groups:
                         param_group['lr'] = self.learning_rate
             else:
                 with torch.inference_mode():
