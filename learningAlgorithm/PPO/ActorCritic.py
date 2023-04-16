@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from torch.distributions import Normal
 
-accepted_kwargs = ["debug_mess", "test"]
+accepted_kwargs = ["debug_mess", "test", "scale_max", "scale_min"]
 
 
 class NNCreatorArgs:
@@ -28,6 +28,7 @@ class ActorCritic(nn.Module):
         super().__init__()
         self.__default_values_kwargs__()
         self.actor_std_noise = actor_std_noise
+        self.scale_output = False
 
         if kwargs:
             self.__prepare_kwargs__(kwargs)
@@ -89,9 +90,16 @@ class ActorCritic(nn.Module):
     def entropy(self):
         return self.distribution.entropy().sum(dim=-1)
 
+    def _scale_output(self, selected_action):
+        return self.range_scaled * selected_action + self.min_range
+
     def update_distribution(self, observations, expert_observations):
         latent_space = self.expert_NN(expert_observations)
         selected_action = self.actor_NN(torch.cat((observations, latent_space), dim=-1))
+
+        if self.scale_output:
+            selected_action = self._scale_output(selected_action)
+
         self.distribution = Normal(selected_action, self.std)
 
     def act(self, observations, expert_observations):
@@ -113,6 +121,8 @@ class ActorCritic(nn.Module):
     def __default_values_kwargs__(self):
         self.debug_mess = False
         self.test = False
+        self.range_scaled = 0.
+        self.min_range = 0.
 
     def __prepare_kwargs__(self, kwargs):
         not_accepted, accepted = check_if_args_in_accepted(kwargs)
@@ -125,6 +135,13 @@ class ActorCritic(nn.Module):
 
         if "test" in accepted:
             self.test = accepted["test"]
+
+        if ("scale_max" in accepted and not "scale_min") or ("scale_min" in accepted and not "scale_max"):
+            raise Exception("Scale without enough information. scale_min and scale_max are required")
+        elif "scale_max" in accepted:
+            self.scale_output = True
+            self.range_scaled = accepted["scale_max"] - accepted["scale_min"]
+            self.min_range = accepted["scale_min"]
 
     def __expert_building__(self, expertArgs):
         if self.debug_mess:
@@ -144,10 +161,10 @@ class ActorCritic(nn.Module):
         if self.debug_mess:
             print("Starting to build the Actor")
 
-        layers = self.__generic_MLP_building__(actorArgs)
+        layers = self.__generic_MLP_building__(actorArgs, scale_output=self.scale_output)
 
         if self.debug_mess:
-            print("Creating the Actor ...", end='  ')
+            print(f"Creating the Actor{' with scaled output' if self.scale_output else ''} ...", end='  ')
 
         self.actor_NN = nn.Sequential(*layers)
 
@@ -169,7 +186,7 @@ class ActorCritic(nn.Module):
             print("Done")
 
     @staticmethod
-    def __generic_MLP_building__(args):
+    def __generic_MLP_building__(args, scale_output=False):
         activation = get_activation(args.activation)
 
         layers = []
@@ -185,6 +202,9 @@ class ActorCritic(nn.Module):
             size_input = args.hidden_dim[h]
 
         layers.append(nn.Linear(size_input, args.outputs[0]))
+
+        if scale_output:
+            layers.append(get_activation("sigmoid"))
         # nn.init.normal_(layers[-1].weight, mean=0.0, std=0.0)
 
         return layers

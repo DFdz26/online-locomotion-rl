@@ -416,7 +416,8 @@ expertArgs.outputs = [latent_space_size]
 
 actor_std_noise = 1.
 
-actorCritic = ActorCritic(actorArgs, criticArgs, actor_std_noise, expertArgs, debug_mess=True)
+actorCritic = ActorCritic(actorArgs, criticArgs, actor_std_noise, expertArgs, debug_mess=True,
+                          scale_max=2, scale_min=-2)
 ppo = PPO(actorCritic, device=device, verbose=True)
 
 reward_obj = Rewards(rollouts, device, reward_list, 0.999999, step_env, discrete_rewards=True)
