@@ -16,6 +16,7 @@ class Observations:
     enable_observe_motor_strength = True
     enable_observe_payload = True
 
+
 class Sensors:
     class Activations:
         height_measurement_activated = False

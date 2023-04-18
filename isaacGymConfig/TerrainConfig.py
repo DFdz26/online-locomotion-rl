@@ -40,7 +40,7 @@ class TerrainComCfg:
 
 
 class Terrain:
-    def __init__(self, device, num_envs, terrain_list, ComConfig: TerrainComCfg) -> None:
+    def __init__(self, device, num_envs, terrain_list, com_config=TerrainComCfg()) -> None:
         self.terrain_match = {
             "random_uniform_terrain": self._random_uniform_terrain_,
             "flat_terrain": self._flat_terrain_,
@@ -55,7 +55,7 @@ class Terrain:
         self.num_envs = num_envs
         self.terrain_list = terrain_list
         self.device = device
-        self.config = ComConfig
+        self.config = com_config
         self.num_terrains = len(self.terrain_list) * self.config.columns
         self.rows = len(self.terrain_list)
         self.information_terrain = []
@@ -238,6 +238,28 @@ class Terrain:
         # self.information_terrain = torch.FloatTensor(self.information_terrain).to(self.device)
 
         return tm_params, vertices, triangles
+
+    def get_max_z_heightfield(self, env_position):
+
+        x1 = (int(env_position[:, 0]) - 1) * self.config.horizontal_scale
+        x2 = (int(env_position[:, 0]) + 1) * self.config.horizontal_scale
+        y1 = (int(env_position[:, 1]) - 1) * self.config.horizontal_scale
+        y2 = (int(env_position[:, 1]) + 1) * self.config.horizontal_scale
+
+        max_z = torch.max(self.map_heightfield[x1:x2, y1:y2]) * self.config.vertical_scale
+
+        return max_z
+
+    def get_height_body_centre(self, env_position):
+
+        x = env_position[:, 0] * self.config.horizontal_scale
+        y = env_position[:, 1] * self.config.horizontal_scale
+
+        height_body_centre = self.map_heightfield[x, y] * self.config.vertical_scale
+        return height_body_centre
+
+    def get_vertical_horizontal_scale(self):
+        return self.config.vertical_scale, self.config.horizontal_scale
 
     def _config_terrain_(self):
         self.num_rows = int(self.config.terrain_width / self.config.horizontal_scale)
