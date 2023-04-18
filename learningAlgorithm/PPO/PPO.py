@@ -19,11 +19,14 @@ class PPOArgs:
     # value_loss_coef = 1.1
     # value_loss_coef = 150.
     # value_loss_coef = 300.  # 1500
-    value_loss_coef = 1500.  # 1500
+    # value_loss_coef = 1.  # 1500
+    # value_loss_coef = 0.05  # 1500
+    value_loss_coef = 0.01  # 1500
     clip_param = 0.2
     entropy_coef = 0.005
     num_learning_epochs = 2  # 5
-    num_mini_batches = 1400  # mini batch size = num_envs*nsteps / nminibatches 400
+    # num_mini_batches = 1400  # mini batch size = num_envs*nsteps / nminibatches 400
+    num_mini_batches = 1700  # mini batch size = num_envs*nsteps / nminibatches 400
     # num_mini_batches = 400  # mini batch size = num_envs*nsteps / nminibatches
     # learning_rate = 0.0000003  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000012  # 5.e-4 and 0.0000003
@@ -32,23 +35,26 @@ class PPOArgs:
     # learning_rate = 0.000000012  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000015  # 5.e-4
     # schedule = 'fixed'  # could be adaptive, fixed
-    schedule = 'fixed'  # could be adaptive, fixed
+    schedule = 'adaptive'  # could be adaptive, fixed
     # schedule = 'adaptive'  # could be adaptive, fixed
     gamma = 0.996
     lam = 0.95
     # desired_kl = 0.01
-    desired_kl = 0.01
+    desired_kl = 0.011
     max_grad_norm = 1.
 
-    # max_clipped_learning_rate = 1.e-3
-    max_clipped_learning_rate = 0.00019
-    # max_clipped_learning_rate = 1.e-2
-    # min_clipped_learning_rate = 5.e-6
-    min_clipped_learning_rate = 0.000008
-    # min_clipped_learning_rate = 1.e-5
+    max_clipped_learning_rate = 1.e-2
+    # max_clipped_learning_rate = 0.00019
+    # # max_clipped_learning_rate = 1.e-2
+    # # min_clipped_learning_rate = 5.e-6
+    # min_clipped_learning_rate = 0.000008
+    min_clipped_learning_rate = 1.e-5
 
     clipped_values = True
     decay_learning_rate = 0.9992
+
+    multiplyier = 1.0
+    decay_multiplyier = 0.95
 
 
 class PPO:
@@ -98,6 +104,10 @@ class PPO:
 
     def train_mode(self):
         self.actor_critic.train()
+
+    def change_kl_distance(self, boost, decay):
+        self.cfg.decay_multiplyier = decay
+        self.cfg.multiplyier = boost
 
     def act(self, observation, observation_expert, actions_mult=1.):
         if self.test:
@@ -203,9 +213,9 @@ class PPO:
                     kl_mean = torch.mean(kl)
                     kl_mean_tot += float(kl_mean)
 
-                    if kl_mean > PPOArgs.desired_kl * 2.0:
+                    if kl_mean > (self.cfg.desired_kl * 2.0 * self.cfg.multiplyier):
                         self.learning_rate = max(PPOArgs.min_clipped_learning_rate, self.learning_rate / 1.5)
-                    elif PPOArgs.desired_kl / 2.0 > kl_mean > 0.0:
+                    elif ((self.cfg.desired_kl / 2.0) * self.cfg.multiplyier)> kl_mean > 0.0:
                         self.learning_rate = min(PPOArgs.max_clipped_learning_rate, self.learning_rate * 1.5)
 
                     lr_mean_tot += self.learning_rate
@@ -217,14 +227,6 @@ class PPO:
 
                 for param_group in self.optimizer.param_groups:
                         param_group['lr'] = self.learning_rate
-            else:
-                with torch.inference_mode():
-                    kl = torch.sum(
-                        torch.log(sigma_batch / old_sigma_batch + 1.e-5) + (
-                                torch.square(old_sigma_batch) + torch.square(old_mu_batch - mu_batch)) / (
-                                2.0 * torch.square(sigma_batch)) - 0.5, axis=-1)
-                    kl_mean = torch.mean(kl)
-                    kl_mean_tot += float(kl_mean)
 
             # Surrogate loss
             ratio = torch.exp(actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch))
@@ -268,6 +270,11 @@ class PPO:
         kl_mean_tot /= num_updates
         lr_mean_tot /= num_updates
         self.memory.clear()
+
+        if self.cfg.multiplyier < 1.0:
+            self.cfg.multiplyier = 1.0
+        elif self.cfg.multiplyier > 1.0:
+            self.cfg.multiplyier *= self.cfg.decay_multiplyier
 
         return {"mean_value_loss": mean_value_loss,
                 "mean_surrogate_loss": mean_surrogate_loss,

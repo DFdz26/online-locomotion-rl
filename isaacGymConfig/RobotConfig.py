@@ -14,6 +14,7 @@ from .Rewards import rep_keyword, root_keyword, initial_keyword, projected_gravi
 from .Rewards import termination_contact_indices_keyword, penalization_contact_indices_keyword, goal_height_keyword
 from .Rewards import foot_contact_indices_keyword, joint_velocity_keyword, foot_velocity_keyword
 from .Rewards import base_lin_vel_keyboard, base_ang_vel_keyboard, base_previous_lin_vel_keyboard
+from .Rewards import previous_actions_keyword, current_actions_keyword
 
 import time
 
@@ -159,6 +160,9 @@ class RobotConfig(BaseConfiguration):
         self.previous_robot_position[env_ids, :3] = self.root_states[:, :3].detach().clone()
         self.previous_robot_velocity[env_ids, :3] = 0.
 
+        if not(self.previous_actions is None):
+            self.previous_actions[env_ids, :] = 0.
+
         a = [0., 0., 0., 1]
         self.init_root_state[env_ids, :3] = self.root_states[env_ids, :3]
         self.root_states[env_ids, 3:7] = torch.FloatTensor(a).to(self.device)
@@ -242,7 +246,9 @@ class RobotConfig(BaseConfiguration):
             foot_velocity_keyword: self.foot_velocities,
             base_lin_vel_keyboard: self.base_lin_vel,
             base_ang_vel_keyboard: self.base_ang_vel,
-            base_previous_lin_vel_keyboard: self.previous_robot_velocity
+            base_previous_lin_vel_keyboard: self.previous_robot_velocity,
+            previous_actions_keyword: self.previous_actions,
+            current_actions_keyword: self.actions
         }
 
         return simulation_info
@@ -278,6 +284,8 @@ class RobotConfig(BaseConfiguration):
             self.reward = self.rewards.compute_rewards_in_state(simulation_info)
             self.previous_robot_position = self.root_states[:, :3].detach().clone()
             self.previous_robot_velocity = self.base_lin_vel.detach().clone()
+            self.previous_actions = self.actions 
+
             self.check_termination()
 
         self.recorded_frames = self._get_cameras_frame()
@@ -405,6 +413,9 @@ class RobotConfig(BaseConfiguration):
 
         self.__prepare_distance_and_termination_rollout_buffers_()
         self.rewards.prepare_buffers()
+
+        self.actions = None
+        self.previous_actions = None
 
     def __get_body_randomization_information(self, get_mass):
         if self.curricula is None:

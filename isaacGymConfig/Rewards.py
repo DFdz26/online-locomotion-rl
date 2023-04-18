@@ -18,6 +18,8 @@ joint_velocity_keyword = 'joint_velocity'
 foot_velocity_keyword = 'feet_velocity'
 previous_joint_velocity_keyboard = 'previous_joint_velocity'
 dt_simulation_keyboard = 'dt_sim'
+previous_actions_keyword = 'previous_action'
+current_actions_keyword = 'current_action'
 
 
 class IndividualReward:
@@ -106,11 +108,27 @@ class IndividualReward:
     def _prepare_buffer_orthogonal_angle_error_term_(self):
         self.orthogonal_angle_error = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
                                                   requires_grad=False)
+        
+    def _prepare_buffer_changed_actions_term_(self):
+        self.changed_actions_buffer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                  requires_grad=False)
 
     ###############################################################################################
     """
     Compute the needed calculations in every step
     """
+    def _compute_in_state_changed_actions_term_(self, simulation_info, reward_data):
+        previous_action = simulation_info[previous_actions_keyword]
+        current_action = simulation_info[current_actions_keyword]
+        weight = reward_data['weight']
+
+        if previous_action is None:
+            return 0
+
+        difference = torch.norm((previous_action - current_action), dim=-1) * weight
+
+        self.changed_actions_buffer += difference 
+        return difference
 
     def _compute_in_state_x_distance_term_(self, simulation_info, reward_data):
         previous_position = simulation_info[previous_position_keyword][:, 0]
@@ -362,6 +380,9 @@ class IndividualReward:
             return torch.abs(self.x_distance)
         else:
             return self.x_distance
+    
+    def _compute_final_changed_actions_term_(self, simulation_info, reward_data):
+        return self.changed_actions_buffer
 
     def _compute_final_y_distance_term_(self, simulation_info, reward_data):
 
@@ -469,6 +490,9 @@ class IndividualReward:
     def _clean_buffer_x_distance_(self):
         self.x_distance = None
         self.x_distance_step = None
+
+    def _clean_buffer_changed_actions_(self):
+        self.changed_actions_buffer.fill_(0)
 
     def _clean_buffer_vel_cont_(self):
         self.accumulative_vel_cont_error.fill_(0)

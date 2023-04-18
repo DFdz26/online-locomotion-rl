@@ -345,6 +345,9 @@ class AlgorithmCurrCfg:
         change_RW_scales = True
         start_learning_from_CPG_RBFN = False
 
+        boost_kl_distance = 50.
+        decay_boost_kl_distance = 0.92
+
     class PIBBCfg:
         stop_learning = True
         delete_noise_at_stop = True
@@ -375,6 +378,7 @@ class AlgorithmCurriculum:
         self.gamma = 0.
         self.iteration = 0.
         self.count_increase_gamma = 0
+        self.PPO = None
 
         self.PPO_learning_activated = False
         self.PIBB_learning_activated = False
@@ -391,6 +395,9 @@ class AlgorithmCurriculum:
 
         self._set_up_activated_learning_output_()
         self.switching_CPG_RBFN = self.cfg.PIBBCfg.switching_indirect_to_direct
+
+    def change_lr(self):
+        self.PPO.change_kl_distance(self.cfg.PPOCfg.boost_kl_distance, self.cfg.PPOCfg.decay_boost_kl_distance)
 
     def get_NN_weights(self):
         return [self.gamma, 1.]
@@ -410,6 +417,7 @@ class AlgorithmCurriculum:
 
         rw_weights["roll_pitch"]["weight"] *= 1.5
         rw_weights["x_velocity"]["weight"] *= 1.12
+        rw_weights["smoothness"]["weight"] *= 1.25
 
         RewardObj.change_rewards(rw_weights)
 
@@ -509,6 +517,7 @@ class AlgorithmCurriculum:
     def update_curriculum_learning(self, policy, rewards, PPO, PIBB):
         information_Actor_critic = None
         scale_PIBB = 1.
+        self.PPO = PPO
 
         if self.PPO_learning_activated:
             rewards_PPO = rewards * self.mult_PPO_rw  # 1000000
@@ -600,6 +609,8 @@ class TerrainCurriculum:
         return initial_position
 
     def _update_iterations_(self, initial_position):
+        change_lr = False
+
         if type(self.threshold) is list and self.control_step < len(self.threshold):
 
             if self.iteration == self.threshold[self.control_step]:
@@ -616,7 +627,22 @@ class TerrainCurriculum:
 
                 initial_position[:, 0] = self.initial_position[:, 0] + self.width_terrains * self.control_env
 
-        return initial_position
+        elif type(self.threshold) is dict:
+            keys_ = list(self.threshold.keys())
+
+            if self.control_step >= len(keys_):
+                return initial_position
+
+            if self.iteration == keys_[self.control_step]:
+                self._update_iteration_jump_()
+                self.control_step += 1
+
+                change_lr = self.threshold[self.iteration]
+
+                initial_position[:, 0] = self.initial_position[:, 0] + self.width_terrains * self.control_env
+
+
+        return initial_position, change_lr
 
     def _update_reward_(self, initial_poistion):
         raise NotImplementedError("Not implemented Terrain update for reward for now")
@@ -738,7 +764,12 @@ class Curriculum:
         if self.terrain_curriculum is None:
             return initial_positions
 
-        return self.terrain_curriculum.update(initial_positions)
+        initial_positions, change_lr = self.terrain_curriculum.update(initial_positions)
+
+        if change_lr and not (self.algorithm_curriculum is None):
+            self.algorithm_curriculum.change_lr()
+
+        return initial_positions
 
     def randomization_available(self):
         return not (self.randomization_curriculum is None)

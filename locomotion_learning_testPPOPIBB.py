@@ -87,6 +87,9 @@ def config_learning_curriculum():
     algCfg.PIBBCfg.threshold = start_PPO_acting_iteration
     algCfg.PPOCfg.gamma = 0.5
     algCfg.PPOCfg.change_RW_scales = True
+    algCfg.PPOCfg.divider_initial_steps = 1.
+    algCfg.PPOCfg.boost_kl_distance = 45.
+    algCfg.PPOCfg.decay_boost_kl_distance = 0.92
 
     if CURRICULUM_CPG_RBFN and not RECOVER_CPG:
         algCfg.PIBBCfg.switching_indirect_to_direct = True
@@ -155,13 +158,13 @@ def config_terrain(env_config):
             "step": 0.03,
             "downsampled_scale": 0.5
         },
-        # {
-        #     "terrain": "random_uniform_terrain",
-        #     "min_height": -0.075,
-        #     "max_height": 0.075,
-        #     "step": 0.025,
-        #     "downsampled_scale": 0.5
-        # }
+        {
+            "terrain": "random_uniform_terrain",
+            "min_height": -0.075,
+            "max_height": 0.075,
+            "step": 0.025,
+            "downsampled_scale": 0.5
+        }
     ]
 
     terrain_com_conf = TerrainComCfg()
@@ -179,11 +182,11 @@ def config_terrain(env_config):
 
         curriculum_terr.object = terrain_obj
         first_curr = start_PPO_acting_iteration + 70
-        second_curr = start_PPO_acting_iteration + 150
-        third_curr = start_PPO_acting_iteration + 151
-        fourth_curr = start_PPO_acting_iteration + 152  # 700
-        fifth_curr = start_PPO_acting_iteration + 500  # 1750
-        curriculum_terr.Control.threshold = [first_curr, second_curr, third_curr, fourth_curr, fifth_curr]
+        second_curr = start_PPO_acting_iteration + 120
+        third_curr = start_PPO_acting_iteration + 180
+        fourth_curr = start_PPO_acting_iteration + 240  # 700
+        fifth_curr = start_PPO_acting_iteration + 400  # 1750
+        curriculum_terr.Control.threshold = {first_curr: False, second_curr: False, third_curr:False, fourth_curr:False, fifth_curr:False}
         curriculum_terr.percentage_step = 0.32
     else:
         curriculum_terr = None
@@ -214,12 +217,12 @@ reward_list = {
         }
     },
 
-    # "y_distance": {
-    #     "weight": -0.06,
-    #     "reward_data": {
-    #         "absolute_distance": True
-    #     }
-    # },
+    "y_distance": {
+        "weight": -0.06 * 1.15,
+        "reward_data": {
+            "absolute_distance": True
+        }
+    },
 
     # "stability": {
     #     "weight": -1.1,
@@ -264,7 +267,7 @@ reward_list = {
     "smoothness": {
         "weight": 1.,
         "reward_data": {
-            "jerk_coef": -0.00002,
+            "jerk_coef": -0.00000008,
         }
     },
 
@@ -302,7 +305,7 @@ reward_list = {
     },
 
     "x_velocity": {
-        "weight": 1. * 2 * 1,
+        "weight": 1. * 2 * 1.12,
         "reward_data": {
             "exponential": False,
             "weight": 0.178  # 0.177
@@ -319,6 +322,13 @@ reward_list = {
     #         "weight": -0.02
     #     }
     # },
+
+    "changed_actions": {
+        "weight": 1.,
+        "reward_data": {
+            "weight": -0.1,
+        }
+    },
 
 }
 
