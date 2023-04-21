@@ -574,7 +574,7 @@ class AlgorithmCurriculum:
 
 
 class TerrainCurriculum:
-    def __init__(self, num_env, device, cfg: TerrainCurrCfg) -> None:
+    def __init__(self, num_env, device, cfg=TerrainCurrCfg()) -> None:
         if None is cfg.object:
             raise Exception("Object not passed to the Terrain Curriculum Configuration object")
 
@@ -626,6 +626,13 @@ class TerrainCurriculum:
 
         return initial_position
 
+    def _change_initial_position(self, initial_position):
+        initial_position[:, 0] = self.initial_position[:, 0] + self.width_terrains * self.control_env
+        max_z = self.object.get_max_z_heightfield(initial_position)
+        initial_position[:, 2] = max_z + self.initial_position[:, 2]
+
+        return initial_position
+
     def _update_iterations_(self, initial_position):
         change_lr = False
 
@@ -634,16 +641,7 @@ class TerrainCurriculum:
             if self.iteration == self.threshold[self.control_step]:
                 self._update_iteration_jump_()
                 self.control_step += 1
-
-                initial_position[:, 0] = self.initial_position[:, 0] + self.width_terrains * self.control_env
-
-        elif type(self.threshold) is int:
-            if self.iteration == self.threshold:
-                self._update_iteration_jump_()
-
-                self.threshold += self.control_step
-
-                initial_position[:, 0] = self.initial_position[:, 0] + self.width_terrains * self.control_env
+                return self._change_initial_position(initial_position), change_lr
 
         elif type(self.threshold) is dict:
             keys_ = list(self.threshold.keys())
@@ -659,7 +657,6 @@ class TerrainCurriculum:
 
                 initial_position[:, 0] = self.initial_position[:, 0] + self.width_terrains * self.control_env
 
-
         return initial_position, change_lr
 
     def _update_reward_(self, initial_poistion):
@@ -670,13 +667,15 @@ class TerrainCurriculum:
 
 
 class Curriculum:
-    def __init__(self, num_env, device, terrain_config=None, randomization_config=None, algorithm_config=None) -> None:
+    def __init__(self, num_env, device, terrain_config=None, randomization_config=None, algorithm_config=None,
+                 rw_object=None) -> None:
         self.terrain_config = terrain_config
         self.randomization_config = randomization_config
         self.algorithm_config = algorithm_config
         self.num_env = num_env
         self.device = device
         self.reduce_steps = 1.
+        self.rw_object = rw_object
 
         self._set_curriculums_()
 
@@ -764,6 +763,7 @@ class Curriculum:
     def set_control_parameters(self, iterations, reward, distance, RwObj, AlgObj, steps_per_iteration):
         new_steps_per_iteration = steps_per_iteration
         randomize_properties = False
+        randomized_activated = False
 
         if not (self.terrain_curriculum is None):
             self.terrain_curriculum.set_control_parameters(iterations, reward)
