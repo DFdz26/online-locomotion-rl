@@ -14,6 +14,7 @@ class Memory:
             self.actions_log_prob = None
             self.action_mean = None
             self.action_sigma = None
+            self.past_observations = None
 
             self.dones = None
 
@@ -21,7 +22,7 @@ class Memory:
             self.__init__()
 
     def __init__(self, num_envs, num_step_per_env, actions_shape, observation_shape, expert_observation_shape,
-                 device='cpu'):
+                 past_observation_shape, device='cpu'):
         self.num_step_per_env = num_step_per_env
         self.num_envs = num_envs
 
@@ -32,6 +33,8 @@ class Memory:
 
         # Simulation memory
         self.observations = torch.zeros(num_step_per_env, num_envs, observation_shape, device=self.device,
+                                        requires_grad=False)
+        self.past_observations = torch.zeros(num_step_per_env, num_envs, past_observation_shape, device=self.device,
                                         requires_grad=False)
         self.observation_expert = torch.zeros(num_step_per_env, num_envs, expert_observation_shape, device=self.device,
                                               requires_grad=False)

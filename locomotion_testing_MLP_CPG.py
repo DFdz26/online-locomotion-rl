@@ -31,7 +31,7 @@ graph_name = "graph_minicheeta_testing"
 # checkpoint_file = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_04_2023__16_25_16/1200.pickle"
 # checkpoint_file = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_04_2023__22_07_23/300.pickle"
 # checkpoint_file = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/2023_04_11.07_15_29/600.pickle"
-checkpoint_file = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/2023_04_11.23_02_48/1400.pickle"
+checkpoint_file = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/2023_04_18.23_46_08/600.pickle"
 # checkpoint_file = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/07_04_2023__00_48_51/400.pickle"
 
 # config_file = "models/configs/config_b1.json"
@@ -115,6 +115,11 @@ def config_env():
     env_config.iterations_without_control = iterations_without_control
 
 
+    env_config.cfg_observations.enable_observe_friction = False
+    env_config.cfg_observations.enable_observe_restitution = False
+    env_config.cfg_observations.enable_observe_motor_strength = True
+    env_config.cfg_observations.enable_observe_payload = True
+
 noise_boost = 1.75
 dt = 0.005
 seconds_iteration = 15
@@ -139,6 +144,7 @@ actions_scale = 0.2
 hip_scale = 0.2
 
 cpg_rbfn_information = logger.recover_nn_information(filename=checkpoint_file)
+cpg_rbfn_information["HYPERPARAM"]['ENCODING'] = 'direct'
 algorithm_param= logger.recover_algorithm_parameters(filename=checkpoint_file)
 cpg_rbf_nn = CPGRBFN(cpg_rbfn_information, dimensions=rollouts, noise_to_zero=True)
 

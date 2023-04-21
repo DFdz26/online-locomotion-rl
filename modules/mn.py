@@ -108,6 +108,8 @@ class MN(torchNet):
     def load_weights(self, nw, update_Wn=True):
         self.device = 'cuda:0'
         W_init = torch.FloatTensor(nw.to('cpu')).to(self.device)
+        print(W_init.size())
+        print(self.W.size())
         self.W = torch.reshape(W_init, self.W.shape)
 
         if update_Wn:

@@ -3,50 +3,65 @@
     "use_gpu": true
   },
   "asset_options": {
-    "asset_folder": "../models/b1/urdf",
-    "asset_filename": "b1.urdf",
+    "asset_folder": "../models/b1_mine/urdf",
+    "asset_filename": "b1_original.urdf",
     "asset_name": "b1",
     "dof_drive_mode": "FORCE",
     "terminate_after_contacts_on": ["thigh", "hip"],
     "penalization_contacts_on": ["calf"],
     "foot_contacts_on": "foot",
-    "goal_height": 0.75,
+    "goal_height": 0.55,
     "initial_postion": {
       "y": 0.0,
       "x": 0.0,
-      "z": 0.75
+      "z": 0.58
     },
+    "torque_limits": [
+      90.0,
+      90.0,
+      130.0,
+      90.0,
+      90.0,
+      130.0,
+      90.0,
+      90.0,
+      130.0,
+      90.0,
+      90.0,
+      130.0
+    ],
     "asset_config": {
       "fix_base_link": false,
       "use_mesh_materials": true,
-      "self_collision": true
+      "self_collision": true,
+      "mirrored": [0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0]
     },
     "default_joint_angles": { 
-        "FL_hip_joint": 0.1,  
-        "RL_hip_joint": 0.1,  
-        "FR_hip_joint": -0.1,  
-        "RR_hip_joint": -0.1,  
+        "FL_hip_joint": 0.0,  
+        "RL_hip_joint": 0.0,  
+        "FR_hip_joint": 0.0,  
+        "RR_hip_joint": 0.0,  
 
-        "FL_thigh_joint": 0.68,  
-        "RL_thigh_joint": 0.68,  
-        "FR_thigh_joint": 0.68,  
-        "RR_thigh_joint": 0.68,  
+        "FL_thigh_joint": 0.85,  
+        "RL_thigh_joint": 0.85,  
+        "FR_thigh_joint": 0.85,  
+        "RR_thigh_joint": 0.85,  
 
-        "FL_calf_joint": -1.254,  
-        "RL_calf_joint": -1.254,  
-        "FR_calf_joint": -1.254,  
-        "RR_calf_joint": -1.254  
+        "FL_calf_joint": -1.56,  
+        "RL_calf_joint": -1.56,  
+        "FR_calf_joint": -1.56,  
+        "RR_calf_joint": -1.56  
     },
     "gains_constants": {
       "Kp": {
-        "hip_joint": 110.0,
-        "thigh_joint": 1150.0,
-        "calf_joint": 125.0
+        "hip_joint": 620.0,
+        "thigh_joint": 420.0,
+        "calf_joint": 420.0
       },
        "Kd": {
-        "hip_joint": 1.5,
-        "thigh_joint": 1.5,
-        "calf_joint": 0.7
+        "hip_joint": 16.5,
+        "thigh_joint": 14.5,
+        "calf_joint": 4.5
       }
     }
   }

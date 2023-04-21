@@ -24,6 +24,7 @@ class NNCreatorArgs:
 class ActorCritic(nn.Module):
 
     def __init__(self, actorArgs, criticArgs, actor_std_noise, expertArgs, **kwargs):
+        studentArgs = []
 
         super().__init__()
         self.__default_values_kwargs__()
@@ -37,11 +38,13 @@ class ActorCritic(nn.Module):
             self.__actor_building__(actorArgs)
             self.__critic_building__(criticArgs)
             self.__expert_building__(expertArgs)
+            # self.__student_building__(studentArgs)
 
             if self.debug_mess:
                 print(f"Actor MLP: {self.actor_NN}")
                 print(f"Critic MLP: {self.critic_NN}")
                 print(f"Expert MLP: {self.expert_NN}")
+                # print(f"Student MLP: {self.expert_NN}")
 
             # Action noise
             self.std = nn.Parameter(actor_std_noise * torch.ones(actorArgs.outputs[0]))

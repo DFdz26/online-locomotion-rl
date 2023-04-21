@@ -11,10 +11,10 @@ from isaacGymConfig.RobotConfig import RobotConfig
 init_p = 150.0
 init_d = 0.5
 
-config_file = "configs/config_b1.json"
+config_file = "models/configs/config_b1.json"
 scale_w = 20.0
-scale_d = 50.0
-scale_p = .05
+scale_d = 2.5
+scale_p = .1
 
 env_config = EnvConfig()
 ROOT = Tk()
@@ -141,10 +141,12 @@ def prep_test():
     env_config.test_config.p_gain.fill_(init_p)
     env_config.test_config.d_gain.fill_(init_d)
 
-    env_config.test_config.height = 0.8
+    env_config.test_config.height = 0.55
 
     env_config.test_config.scale_actions = 0.3
     env_config.test_config.scale_hip = 0.15
+    # env_config.test_config.scale_actions = 10.
+    # env_config.test_config.scale_hip = 1.
 
 
 def continue_run(sim):
@@ -159,8 +161,8 @@ def continue_run(sim):
         knee_d_value = knee_d.get() / scale_d - 50 / scale_d
         ankle_d_value = ankle_d.get() / scale_d - 50 / scale_d
 
-        hip_p_value = hip_p.get() / scale_p - 50 / scale_p
-        knee_p_value = knee_p.get() / scale_p - 50 / scale_p
+        hip_p_value = (hip_p.get() / scale_p - 50 / scale_p)
+        knee_p_value = (knee_p.get() / scale_p - 50 / scale_p)
         ankle_p_value = ankle_p.get() / scale_p - 50 / scale_p
 
         env_config.test_config.actions[0, [0, 3, 6, 9]] = hip_value
@@ -197,9 +199,9 @@ def continue_run(sim):
         torque_knee.config(text=f"{float(sim.torques[0, 1])}")
         torque_ankle.config(text=f"{float(sim.torques[0, 2])}")
 
-        desired_hip.config(text=f"{float(sim.desired_config[0])}")
-        desired_knee.config(text=f"{float(sim.desired_config[1])}")
-        desired_ankle.config(text=f"{float(sim.desired_config[2])}")
+        desired_hip.config(text=f"{float(sim.desired_config[0, 0])}")
+        desired_knee.config(text=f"{float(sim.desired_config[0, 1])}")
+        desired_ankle.config(text=f"{float(sim.desired_config[0, 2])}")
 
         actual_hip.config(text=f"{float(sim.dof_pos[0, 0])}")
         actual_knee.config(text=f"{float(sim.dof_pos[0, 1])}")
@@ -209,5 +211,17 @@ def continue_run(sim):
 prep_test()
 config_env()
 
-minicheeta = RobotConfig(config_file, env_config, None, None, None, None)
-continue_run(minicheeta)
+robot = RobotConfig(config_file, env_config, None, None, None, None)
+print("=======================")
+print(f"dof_names: {robot.dof_names}")
+# print(f"dof_prop: {robot.dof_prop_assets.names}")
+print(f"dof_prop: {robot.dof_prop_assets.__dir__()}")
+print(f"dof_prop: {robot.dof_prop_assets.dtype.names}")
+print(f"dof_prop: {robot.dof_prop_assets}")
+print(f"lowe: {robot.dof_prop_assets['upper']}")
+print(f"lowe: {robot.dof_prop_assets['lower']}")
+print(f"driveMode: {robot.dof_prop_assets['driveMode']}")
+print(f"stiffness: {robot.dof_prop_assets['stiffness']}")
+print(f"damping: {robot.dof_prop_assets['damping']}")
+print("=======================")
+continue_run(robot)

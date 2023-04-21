@@ -5,6 +5,7 @@ class TestConfig:
     p_gain = None
     d_gain = None
     height = 0.
+    deactivate_gravity = True
 
     def __init__(self) -> None:
         pass

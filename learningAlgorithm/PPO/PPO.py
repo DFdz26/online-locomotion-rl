@@ -21,12 +21,12 @@ class PPOArgs:
     # value_loss_coef = 300.  # 1500
     # value_loss_coef = 1.  # 1500
     # value_loss_coef = 0.05  # 1500
-    value_loss_coef = 0.01  # 1500
+    value_loss_coef = 0.025  # 1500
     clip_param = 0.2
     entropy_coef = 0.005
     num_learning_epochs = 2  # 5
     # num_mini_batches = 1400  # mini batch size = num_envs*nsteps / nminibatches 400
-    num_mini_batches = 1700  # mini batch size = num_envs*nsteps / nminibatches 400
+    num_mini_batches = 2000  # mini batch size = num_envs*nsteps / nminibatches 400
     # num_mini_batches = 400  # mini batch size = num_envs*nsteps / nminibatches
     # learning_rate = 0.0000003  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000012  # 5.e-4 and 0.0000003
@@ -55,6 +55,7 @@ class PPOArgs:
 
     multiplyier = 1.0
     decay_multiplyier = 0.95
+    num_past_actions = 15
 
 
 class PPO:
@@ -91,12 +92,12 @@ class PPO:
         return self.cfg
 
     def prepare_training(self, env_class, steps_per_iteration, num_observations, expert_obs, num_actions, policy):
-        self.init_memory(env_class.num_envs, steps_per_iteration, num_observations, expert_obs, num_actions)
+        self.init_memory(env_class.num_envs, steps_per_iteration, num_observations, expert_obs, num_actions, self.cfg.num_past_actions)
         self.train_mode()
 
-    def init_memory(self, num_envs, num_step_simulations_per_env, actor_obs_shape, expert_obs, action_shape):
+    def init_memory(self, num_envs, num_step_simulations_per_env, actor_obs_shape, expert_obs, action_shape, n_past_observation):
         self.memory = Memory(num_envs, num_step_simulations_per_env, action_shape,
-                             actor_obs_shape, expert_obs, self.device)
+                             actor_obs_shape, expert_obs, n_past_observation * actor_obs_shape, self.device)
 
     def test_mode(self):
         self.test = True
@@ -108,6 +109,9 @@ class PPO:
     def change_kl_distance(self, boost, decay):
         self.cfg.decay_multiplyier = decay
         self.cfg.multiplyier = boost
+
+    def change_coef_value(self, new):
+        self.cfg.value_loss_coef = new
 
     def act(self, observation, observation_expert, actions_mult=1.):
         if self.test:
@@ -248,7 +252,7 @@ class PPO:
             else:
                 value_loss = (returns_batch - value_batch).pow(2).mean()
 
-            loss = surrogate_loss + PPOArgs.value_loss_coef * value_loss - PPOArgs.entropy_coef * entropy_batch.mean()
+            loss = surrogate_loss + self.cfg.value_loss_coef * value_loss - PPOArgs.entropy_coef * entropy_batch.mean()
             # loss = -loss
             mean_loss += float(loss)
 

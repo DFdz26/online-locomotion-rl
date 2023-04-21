@@ -62,6 +62,11 @@ class RobotConfig(BaseConfiguration):
         self.num_observations = 0
         self.num_observations_sensors = 0
         self.num_expert_observations = 0
+        self.viewer = None
+        self.torque_limits = None
+        self.upper_limits_joint = None
+        self.lower_limits_joint = None
+        self.surpasing_limits = None
 
         self.rewards = rewards
         self.config_intial_position = [self.cfg["asset_options"]["initial_postion"][axis]
@@ -155,6 +160,7 @@ class RobotConfig(BaseConfiguration):
                              requires_grad=False).nonzero(as_tuple=False).flatten()
 
         self.root_states[env_ids] = 0.
+        self.surpasing_limits[env_ids] = 0.
 
         self.root_states[env_ids, :3] = self.started_position[env_ids]
         self.previous_robot_position[env_ids, :3] = self.root_states[:, :3].detach().clone()
@@ -240,7 +246,7 @@ class RobotConfig(BaseConfiguration):
             contact_forces_gravity_keyword: self.contact_forces,
             termination_contact_indices_keyword: self.termination_contact_indices,
             penalization_contact_indices_keyword: self.penalization_contact_indices,
-            goal_height_keyword: self.goal_height,
+            goal_height_keyword: self.goal_height_individual,
             foot_contact_indices_keyword: self.feet_indices,
             joint_velocity_keyword: self.dof_vel,
             foot_velocity_keyword: self.foot_velocities,
@@ -291,28 +297,29 @@ class RobotConfig(BaseConfiguration):
         self.recorded_frames = self._get_cameras_frame()
 
     def __prepare_distance_and_termination_rollout_buffers_(self):
-        rew = self.rewards.reward_terms
+        if not self.env_config.test_joints:
+            rew = self.rewards.reward_terms
 
-        if not ("x_distance" in rew):
-            rew["x_distance"] = {
-                "weight": 0.,
-                "reward_data": {
-                    "absolute_distance": False
+            if not ("x_distance" in rew):
+                rew["x_distance"] = {
+                    "weight": 0.,
+                    "reward_data": {
+                        "absolute_distance": False
+                    }
                 }
-            }
 
-        if not ("high_penalization_contacts" in rew):
-            rew["high_penalization_contacts"] = {
-                "weight": 0.,
-                "reward_data": {
-                    "max_clip": 0.0,
-                    "weights": {
-                        "correction_state": 0.
-                    },
+            if not ("high_penalization_contacts" in rew):
+                rew["high_penalization_contacts"] = {
+                    "weight": 0.,
+                    "reward_data": {
+                        "max_clip": 0.0,
+                        "weights": {
+                            "correction_state": 0.
+                        },
+                    }
                 }
-            }
 
-        self.rewards.change_rewards(rew)
+            self.rewards.change_rewards(rew)
 
     def __prepare_buffers(self):
         # get gym GPU state tensors
@@ -412,10 +419,18 @@ class RobotConfig(BaseConfiguration):
         self.previous_dof_vel = self.dof_vel.detach().clone()
 
         self.__prepare_distance_and_termination_rollout_buffers_()
-        self.rewards.prepare_buffers()
+
+        if not self.env_config.test_joints:
+            self.rewards.prepare_buffers()
 
         self.actions = None
         self.previous_actions = None
+
+        self.goal_height_individual = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.goal_height_individual.fill_(self.goal_height)
+
+        self.torque_limits = torch.tensor(self.cfg["asset_options"]["torque_limits"], requires_grad=False).to(self.device)
+        self.surpasing_limits = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device, requires_grad=False)
 
     def __get_body_randomization_information(self, get_mass):
         if self.curricula is None:
@@ -459,11 +474,14 @@ class RobotConfig(BaseConfiguration):
         self.gym.prepare_sim(self.sim)
 
     def controller(self, test_data=None, actions=None, default=False, position_control=True):
-        if self.env_config.test_joints:
-            actions_scaled = test_data.actions[0, :12] * test_data.scale_actions
+        if self.print_flag_:
+            print(actions)
 
-            for i in [0, 3, 6, 9]:
-                actions_scaled[i] *= test_data.scale_hip
+        if self.env_config.test_joints:
+            test_data.actions = test_data.actions * self.mirrored
+
+            actions_scaled = test_data.actions[:, :12] * test_data.scale_actions
+            actions_scaled[:, [0, 3, 6, 9]] *= test_data.scale_hip
 
             self.desired_config = self.default_dof_pos + actions_scaled
 
@@ -472,15 +490,20 @@ class RobotConfig(BaseConfiguration):
             torques = test_data.p_gain * self.controller_error - test_data.d_gain * self.dof_vel
 
         else:
+            actions = actions * self.mirrored
+
             if self.env_config.disable_leg:
                 actions[:, :3] = 0.
 
             self.actions = actions
             actions_scaled = actions[:, :12] * self.env_config.actions_scale
-            for i in [0, 3, 6, 9]:
-                actions_scaled[:, i] *= self.env_config.hip_scale
+            actions_scaled[:, [0, 3, 6, 9]] *= self.env_config.hip_scale
 
             self.desired_config = self.default_dof_pos + actions_scaled
+            self.surpasing_limits = torch.sum(self.desired_config.ge(self.upper_limits_joint), dim=-1)
+            self.surpasing_limits |= torch.sum(self.desired_config.le(self.lower_limits_joint), dim=-1)
+            
+            self.desired_config.clip(min=self.lower_limits_joint, max=self.upper_limits_joint)
 
             self.controller_error = (self.desired_config - self.dof_pos)
 
@@ -489,7 +512,7 @@ class RobotConfig(BaseConfiguration):
             if not(self.curricula is None):
                 torques = torques * self.motor_strengths.unsqueeze(1)
 
-        self.torques = torques
+        self.torques = torques.clip(max=self.torque_limits, min=-self.torque_limits)
 
     def __check_pos_limit(self):
         out_of_limits = -(self.dof_pos - self.lower_limit_cuda[:]).clip(max=0.)
@@ -531,11 +554,11 @@ class RobotConfig(BaseConfiguration):
         info = None
         obs = None
         obs_expert = None
-
         closed_simulation = self.compute_graphics()
-        self.previous_dof_vel = self.dof_vel.detach().clone()
 
-        actions = torch.clip(actions, -self.env_config.clip_actions, self.env_config.clip_actions).to(self.device)
+        if not self.env_config.test_joints:            
+            self.previous_dof_vel = self.dof_vel.detach().clone()
+            actions = torch.clip(actions, -self.env_config.clip_actions, self.env_config.clip_actions).to(self.device)
 
         if not closed_simulation:
             for _ in range(self.env_config.iterations_without_control + 1):
@@ -548,9 +571,11 @@ class RobotConfig(BaseConfiguration):
                 self._refresh_gym_tensors_()
             self.post_step()
 
-            obs, obs_expert = self.create_observations()
-            dones = self.finished
-            info = None
+            if not self.env_config.test_joints:
+
+                obs, obs_expert = self.create_observations()
+                dones = self.finished
+                info = None
 
         return obs, obs_expert, self.actions, self.reward, dones, info, closed_simulation
 
@@ -575,6 +600,9 @@ class RobotConfig(BaseConfiguration):
 
     def get_num_observations(self):
         return self.num_observations, self.num_observations_sensors, self.num_expert_observations
+    
+    def print_flag_act(self):
+        self.print_flag_ = True
 
     def create_observations(self):
         # obs = torch.cat((
@@ -768,6 +796,9 @@ class RobotConfig(BaseConfiguration):
             print("Loading asset '%s' from '%s'" % (self.asset_file, self.asset_root))
 
         asset_options = gymapi.AssetOptions()
+        print("-------")
+        print(f"{asset_options.__dir__()}")
+        print("-------")
         asset_config_cfg = self.cfg["asset_options"]["asset_config"]
         asset_config_cfg["default_dof_drive_mode"] = convert_drive_mode(self.cfg["asset_options"]["dof_drive_mode"])
         # asset_config_cfg["default_dof_drive_mode"] = 3
@@ -777,6 +808,12 @@ class RobotConfig(BaseConfiguration):
         asset_options.fix_base_link = asset_config_cfg["fix_base_link"] if not self.env_config.test_joints else True
         asset_options.use_mesh_materials = asset_config_cfg["use_mesh_materials"]
         asset_options.default_dof_drive_mode = asset_config_cfg["default_dof_drive_mode"]
+        asset_options.density = 0.01
+        asset_options.armature = 0.
+        asset_options.angular_damping = 0.
+        asset_options.linear_damping = 0.
+        asset_options.max_angular_velocity = 1000.
+        asset_options.max_linear_velocity = 1000.
         asset_options.flip_visual_attachments = False
 
         self.robot_assets = self.gym.load_asset(self.sim, self.asset_root, self.asset_file, asset_options)
@@ -803,6 +840,23 @@ class RobotConfig(BaseConfiguration):
         self.upper_limit = self.dof_prop_assets['upper']
         self.default_friction = rigid_shape_props_asset[1].friction
         self.default_restitution = rigid_shape_props_asset[1].restitution
+        self.upper_limits_joint = torch.tensor(self.dof_prop_assets['upper'], requires_grad=False).to(self.device)
+        self.lower_limits_joint = torch.tensor(self.dof_prop_assets['lower'], requires_grad=False).to(self.device)
+
+        self.mirrored = torch.ones(self.num_dof, dtype=torch.int, device=self.device, requires_grad=False)
+
+        if 'mirrored' in asset_config_cfg:
+            if len(asset_config_cfg['mirrored']) != self.num_dof:
+                raise Exception("The number of the mirrored dof in configuration is not the same as the number of " \
+                                f'dof. Number of dof: {self.num_dof}')
+            mirrored = [-2 * i for i in asset_config_cfg['mirrored']]
+            self.mirrored += torch.IntTensor(mirrored).to(self.device)
+            # self.mirrored = -1 * int(asset_config_cfg['mirrored']) + 1 * int(not asset_config_cfg['mirrored'])
+            # self.mirrored = torch.IntTensor(self.mirrored, device=self.device, requires_grad=False)
+    
+
+        self.print_flag_ = False
+
 
     def _process_rigid_body_props(self, body_prop, n_env):
         self.default_body_mass = body_prop[0].mass

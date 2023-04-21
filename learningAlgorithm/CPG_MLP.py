@@ -184,14 +184,7 @@ class PPO_PIBB:
             PPO_actions = self.PPO.act(observation, expert_obs)
             PIBB_actions = self.PIBB.act(observation, expert_obs)
 
-            raise Exception("Bro change this for loop")
-
-            for i in range(len(PPO_actions)):
-                new = [(PPO_actions[i] - torch.min(PPO_actions[i])) / (
-                        torch.max(PPO_actions[i]) - torch.min(PPO_actions[i])) - 0.5] * 4
-                PPO_actions[i] = new[0]
-
-            return 1 * PIBB_actions + 0.5 * PPO_actions
+            return 0.5 * PIBB_actions + 0.5 * PPO_actions
             # return PIBB_actions 
             # return self.learnt_weight["PPO"]* PPO_actions 
         else:

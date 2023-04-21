@@ -120,6 +120,9 @@ class Runner:
                 if closed_simulation or torch.all(dones > 0):
                     break
 
+                # if i == 499 and step == (steps_per_iteration/2):
+                #     self.agents.print_flag_act()
+
             if closed_simulation:
                 break
 

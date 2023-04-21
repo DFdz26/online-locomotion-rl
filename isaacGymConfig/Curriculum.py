@@ -364,6 +364,7 @@ class AlgorithmCurrCfg:
         boost_first_switching_noise = 1.
 
         start_at_begining = True
+        decay_influence = 0.996
 
     class StoredDistance:
         activate_store_distance = False
@@ -371,7 +372,7 @@ class AlgorithmCurrCfg:
 
 
 class AlgorithmCurriculum:
-    def __init__(self, device, cfg: AlgorithmCurrCfg):
+    def __init__(self, device, cfg: AlgorithmCurrCfg, verbose=True):
         self.cfg = cfg
         self.device = device
         self.stored_distance = None
@@ -379,6 +380,10 @@ class AlgorithmCurriculum:
         self.iteration = 0.
         self.count_increase_gamma = 0
         self.PPO = None
+        self.verbose = verbose
+
+        self.CPG_influence = 1.
+        self.start_decrease_CPG = False
 
         self.PPO_learning_activated = False
         self.PIBB_learning_activated = False
@@ -396,11 +401,16 @@ class AlgorithmCurriculum:
         self._set_up_activated_learning_output_()
         self.switching_CPG_RBFN = self.cfg.PIBBCfg.switching_indirect_to_direct
 
+        if self.verbose:
+            if self.cfg.PIBBCfg.decay_influence < 1.:
+                print(f"Influence of the CPG will decrease since {self.cfg.PIBBCfg.threshold}")
+                print(f"Peace: {self.cfg.PIBBCfg.decay_influence}")
+
     def change_lr(self):
-        self.PPO.change_kl_distance(self.cfg.PPOCfg.boost_kl_distance, self.cfg.PPOCfg.decay_boost_kl_distance)
+        self.PPO.change_coef_value(0.025/250)
 
     def get_NN_weights(self):
-        return [self.gamma, 1.]
+        return [self.gamma, self.CPG_influence]
 
     def _set_up_activated_learning_output_(self):
         if not self.cfg.PPOCfg.start_when_PIBB_stops:
@@ -454,6 +464,7 @@ class AlgorithmCurriculum:
         self.PPO_learning_activated = True
         steps_per_iteration = int(math.floor(steps_per_iteration / self.cfg.PPOCfg.divider_initial_steps))
         self.gamma = self.cfg.PPOCfg.gamma
+        self.start_decrease_CPG = True
 
         if self.cfg.PPOCfg.change_RW_scales:
             self._change_RW_scales_(RewardObj)
@@ -462,6 +473,13 @@ class AlgorithmCurriculum:
 
     def set_control_parameters(self, iterations, reward, distance, RewardObj, learningObj, steps_per_iteration):
         self.iteration = iterations
+
+        if self.start_decrease_CPG and self.cfg.PIBBCfg.decay_influence < 1.:
+            self.CPG_influence *= self.cfg.PIBBCfg.decay_influence
+
+            if self.CPG_influence < 0.5:
+                self.CPG_influence = 0.5
+                self.start_decrease_CPG = False
 
         if self.switching_CPG_RBFN and self.iteration == self.cfg.PIBBCfg.threshold_switching:
             self._change_indirect_to_direct(learningObj, RewardObj)
@@ -510,7 +528,7 @@ class AlgorithmCurriculum:
             if actions is None:
                 actions = actions_PPO * self.gamma
             else:
-                actions += self.gamma * actions_PPO
+                actions = self.CPG_influence * actions + (1 -self.CPG_influence) * actions_PPO
 
         return actions
 
