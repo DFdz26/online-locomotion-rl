@@ -2,7 +2,10 @@ from isaacgym import gymapi
 from isaacgym import gymutil
 from isaacgym.torch_utils import *
 
-from params_proto.proto import PrefixProto
+try:
+    from params_proto.proto import PrefixProto
+except ImportError:
+    from params_proto.neo_proto import PrefixProto
 
 
 class BaseConfiguration:

@@ -15,9 +15,8 @@ from .Rewards import termination_contact_indices_keyword, penalization_contact_i
 from .Rewards import foot_contact_indices_keyword, joint_velocity_keyword, foot_velocity_keyword
 from .Rewards import base_lin_vel_keyboard, base_ang_vel_keyboard, base_previous_lin_vel_keyboard
 from .Rewards import previous_actions_keyword, current_actions_keyword, joint_acceleration_keyword
-from .Rewards import count_limit_vel_keyword, count_joint_limits_keyword
+from .Rewards import count_limit_vel_keyword, count_joint_limits_keyword, offset_keyword
 
-import time
 
 default_pos = [0.5, 0.32, 0.5] * 4
 
@@ -262,6 +261,7 @@ class RobotConfig(BaseConfiguration):
             joint_acceleration_keyword: self.aceeleration_dof,
             count_limit_vel_keyword: self.surpassing_velocity_limits,
             count_joint_limits_keyword: self.surpasing_limits,
+            offset_keyword: self.terrain_config.get_height_body_centre(self.root_states[:, :3])
         }
 
         return simulation_info
@@ -271,6 +271,52 @@ class RobotConfig(BaseConfiguration):
 
         rewards = self.rewards.compute_final_reward(simulation_info)
         return rewards
+
+    def _init_height_points(self, env_ids):
+        """ Returns points at which the height measurments are sampled (in base frame)
+        Returns:
+            [torch.Tensor]: Tensor of shape (num_envs, self.num_height_points, 3)
+        """
+        y = torch.tensor(self.env_config.sensors.height_sensor.y_points, device=self.device, requires_grad=False)
+        x = torch.tensor(self.env_config.sensors.height_sensor.x_points, device=self.device, requires_grad=False)
+        grid_x, grid_y = torch.meshgrid(x, y)
+
+        self.num_points = grid_x.numel()
+        points = torch.zeros(len(env_ids), self.num_points, 3, device=self.device, requires_grad=False)
+        points[:, :, 0] = grid_x.flatten()
+        points[:, :, 1] = grid_y.flatten()
+        return points
+
+    def _get_heights(self, env_ids, cfg):
+        """ Samples heights of the terrain at required points around each robot.
+            The points are offset by the base's position and rotated by the base's yaw
+        Args:
+            env_ids (List[int], optional): Subset of environments for which to return the heights. Defaults to None.
+        Raises:
+            NameError: [description]
+        Returns:
+            [type]: [description]
+        """
+        if self.curricula is None:
+            return torch.zeros(len(env_ids), cfg.env.num_height_points, device=self.device, requires_grad=False)
+
+        points = quat_apply_yaw(self.base_quat[env_ids].repeat(1, cfg.env.num_height_points),
+                                self.height_points[env_ids]) + (self.root_states[env_ids, :3]).unsqueeze(1)
+
+        points += self.terrain.cfg.border_size
+        points = (points / self.terrain.cfg.horizontal_scale).long()
+        px = points[:, :, 0].view(-1)
+        py = points[:, :, 1].view(-1)
+        px = torch.clip(px, 0, self.height_samples.shape[0] - 2)
+        py = torch.clip(py, 0, self.height_samples.shape[1] - 2)
+
+        heights1 = self.height_samples[px, py]
+        heights2 = self.height_samples[px + 1, py]
+        heights3 = self.height_samples[px, py + 1]
+        heights = torch.min(heights1, heights2)
+        heights = torch.min(heights, heights3)
+
+        return heights.view(len(env_ids), -1) * self.terrain.cfg.vertical_scale
 
     def post_step(self):
         if self.recording_in_progress:
@@ -441,6 +487,10 @@ class RobotConfig(BaseConfiguration):
         self.torque_limits = torch.tensor(self.cfg["asset_options"]["torque_limits"], requires_grad=False).to(self.device)
         self.surpasing_limits = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device, requires_grad=False)
         self.surpassing_velocity_limits = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device, requires_grad=False)
+
+        if self.env_config.sensors.Activations.height_measurement_activated:
+            self.height_points = self._init_height_points(torch.arange(self.num_envs, device=self.device))
+        self.measured_heights = 0
 
     def __get_body_randomization_information(self, get_mass):
         if self.curricula is None:
@@ -962,3 +1012,10 @@ class RobotConfig(BaseConfiguration):
             self.gym.destroy_viewer(self.viewer)
 
         return super().__del__()
+
+
+def quat_apply_yaw(quat, vec):
+    quat_yaw = quat.clone().view(-1, 4)
+    quat_yaw[:, :2] = 0.
+    quat_yaw = normalize(quat_yaw)
+    return quat_apply(quat_yaw, vec)
