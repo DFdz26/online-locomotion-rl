@@ -291,7 +291,6 @@ class IndividualReward:
     def _compute_in_state_height_error_term_(self, simulation_info, reward_data):
         z_state = simulation_info[root_keyword][:, 2]
         goal_height = simulation_info[goal_height_keyword]
-        offset = simulation_info[offset_keyword]
 
         in_state = torch.sqrt(torch.abs(z_state - goal_height)) / 100
         self.accumulative_height_error += in_state

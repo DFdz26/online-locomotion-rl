@@ -261,7 +261,7 @@ class RobotConfig(BaseConfiguration):
             joint_acceleration_keyword: self.aceeleration_dof,
             count_limit_vel_keyword: self.surpassing_velocity_limits,
             count_joint_limits_keyword: self.surpasing_limits,
-            offset_keyword: self.terrain_config.get_height_body_centre(self.root_states[:, :3])
+            # offset_keyword: self.terrain_config.get_height_body_centre(self.root_states[:, :3])
         }
 
         return simulation_info
