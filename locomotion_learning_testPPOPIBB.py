@@ -24,15 +24,15 @@ from learningAlgorithm.CPG_MLP import PPO_PIBB
 from isaacGymConfig.TerrainConfig import Terrain, TerrainComCfg
 from isaacGymConfig.Curriculum import Curriculum, TerrainCurrCfg, AlgorithmCurrCfg, RandomizationCurrCfg
 
-config_file = "models/configs/config_minicheeta.json"
-graph_name = "graph_minicheeta_learning"
+# config_file = "models/configs/config_minicheeta.json"
+# graph_name = "graph_minicheeta_learning"
 cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_04_2023__22_07_23/300.pickle"
 
-# config_file = "models/configs/config_b1.json"
-# graph_name = "graph_b1_learning"
+config_file = "models/configs/config_b1.json"
+graph_name = "graph_b1_learning"
 
 ACTIVE_RECORDING_CAMERA = True
-frequency_recording = 100
+frequency_recording = 50
 
 CURRICULUM_CPG_RBFN = True
 RENDER_GUI = False
@@ -41,7 +41,7 @@ RECOVER_CPG = False
 LOAD_CACHE = True
 TERRAIN_CURRICULUM = True
 # rollouts = 1500
-rollouts = 1500
+rollouts = 1250
 iterations_without_control = 1
 num_env_colums = 100
 # learning_rate_PPO = 0.0000003  # 0.0000003
@@ -181,12 +181,13 @@ def config_terrain(env_config):
         curriculum_terr = TerrainCurrCfg()
 
         curriculum_terr.object = terrain_obj
-        first_curr = start_PPO_acting_iteration + 70
-        second_curr = start_PPO_acting_iteration + 120
-        third_curr = start_PPO_acting_iteration + 180
-        fourth_curr = start_PPO_acting_iteration + 240  # 700
-        fifth_curr = start_PPO_acting_iteration + 400  # 1750
-        curriculum_terr.Control.threshold = {first_curr: False, second_curr: False, third_curr:False, fourth_curr:False, fifth_curr:False}
+        delay = 0
+        first_curr = start_PPO_acting_iteration + 70 + delay
+        second_curr = start_PPO_acting_iteration + 120 + delay
+        third_curr = start_PPO_acting_iteration + 180 + delay
+        fourth_curr = start_PPO_acting_iteration + 240  + delay # 700
+        fifth_curr = start_PPO_acting_iteration + 400 + delay # 1750
+        curriculum_terr.Control.threshold = {first_curr: False, second_curr: False, third_curr:False, fourth_curr:True, fifth_curr:True}
         curriculum_terr.percentage_step = 0.32
     else:
         curriculum_terr = None
@@ -218,7 +219,7 @@ reward_list = {
     },
 
     "y_distance": {
-        "weight": -0.06 * 1.15,
+        "weight": -0.06 * 3.,
         "reward_data": {
             "absolute_distance": True
         }
@@ -239,7 +240,7 @@ reward_list = {
     # },
 
     "high_penalization_contacts": {
-        "weight": -0.25,
+        "weight": -0.25 * 1.5,
         "reward_data": {
             "absolute_distance": True,
             "max_clip": 2.5,
@@ -251,7 +252,7 @@ reward_list = {
     },
 
     "height_error": {
-        "weight": -2.9,
+        "weight": -2.9 * 1.2,
         "reward_data": {
             "max_clip": 2.5,
         }
@@ -272,7 +273,7 @@ reward_list = {
     },
 
     "z_vel": {
-        "weight": 0.1,
+        "weight": 0.1 * 10.,
         "reward_data": {
             "exponential": False,
             "weight": -0.24
@@ -280,7 +281,7 @@ reward_list = {
     },
 
     "roll_pitch": {
-        "weight": 0.077,
+        "weight": 0.077 * 1,
         "reward_data": {
             "exponential": False,
             "weight": -0.15
@@ -297,7 +298,7 @@ reward_list = {
     },
 
     "y_velocity": {
-        "weight": 0.1,
+        "weight": 0.1 * 1.4,
         "reward_data": {
             "exponential": False,
             "weight": -0.075  # 0.05
@@ -305,16 +306,35 @@ reward_list = {
     },
 
     "x_velocity": {
-        "weight": 1. * 2 * 1.12,
+        "weight": 1. * 2 * 1.5, # 1.12
         "reward_data": {
             "exponential": False,
             "weight": 0.178  # 0.177
         }
     },
 
-    "vel_cont": {
-        "weight": -0.2,  # 0.25
+     "velocity_smoothness": {
+        "weight": 0.08 * 0.75,
+        "reward_data": {
+            "weight_vel": 0.01, 
+            "weight_acc": 0.00002,  
+            "weight": -0.0005,  
+        }
     },
+
+    "limits": {
+        "weight": 0.1,
+        "reward_data": {
+            "velocity_limits": 1., 
+            "joint_limits": 1.,  
+            "weight": -1,  
+        }
+    },
+
+
+    # "vel_cont": {
+    #     "weight": -0.2,  # 0.25
+    # },
 
     # "orthogonal_angle_error": {
     #     "weight": 0.1,
@@ -323,12 +343,12 @@ reward_list = {
     #     }
     # },
 
-    "changed_actions": {
-        "weight": 1.,
-        "reward_data": {
-            "weight": -0.1,
-        }
-    },
+    # "changed_actions": {
+    #     "weight": 2. * 0.07,
+    #     "reward_data": {
+    #         "weight": 0.1,
+    #     }
+    # },
 
 }
 
@@ -362,8 +382,10 @@ else:
     # encoding = "indirect"
     encoding = "direct"
 
-actions_scale = 0.2
-hip_scale = 0.2
+# actions_scale = 0.2
+actions_scale = 0.25
+# hip_scale = 0.2
+hip_scale = 0.12
 
 hyperparam = {
     "NIN": 1,

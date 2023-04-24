@@ -425,9 +425,13 @@ class AlgorithmCurriculum:
     def _change_RW_scales_(RewardObj: Rewards):
         rw_weights = RewardObj.get_rewards()
 
-        rw_weights["roll_pitch"]["weight"] *= 1.5
-        rw_weights["x_velocity"]["weight"] *= 1.12
-        rw_weights["smoothness"]["weight"] *= 1.25
+        rw_weights["roll_pitch"]["weight"] *= 2.25
+        rw_weights["x_velocity"]["weight"] *= 1.
+        rw_weights["smoothness"]["weight"] *= 2.
+        rw_weights["velocity_smoothness"]["weight"] *= 2.
+        rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 1200.  # 700
+        # rw_weights["changed_actions"]["weight"] *= 2.5
+        #rw_weights["height_error"]["weight"] /= 2
 
         RewardObj.change_rewards(rw_weights)
 
@@ -440,6 +444,7 @@ class AlgorithmCurriculum:
 
             rw_weights["yaw_vel"]["weight"] *= 1.5
             rw_weights["x_velocity"]["weight"] /= 1.3
+            rw_weights["velocity_smoothness"]["weight"] *= 1.2
 
             rewardObj.change_rewards(rw_weights)
 
@@ -791,3 +796,8 @@ class Curriculum:
 
     def randomization_available(self):
         return not (self.randomization_curriculum is None)
+    
+    def get_levels_curriculum(self):
+        terrain = 0
+        randomization = 0
+        algorithm = 0

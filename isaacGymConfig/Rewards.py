@@ -20,6 +20,9 @@ previous_joint_velocity_keyboard = 'previous_joint_velocity'
 dt_simulation_keyboard = 'dt_sim'
 previous_actions_keyword = 'previous_action'
 current_actions_keyword = 'current_action'
+joint_acceleration_keyword = 'acceleration_joints'
+count_limit_vel_keyword = 'velocity_limits_count'
+count_joint_limits_keyword = 'joint_limits_count'
 
 
 class IndividualReward:
@@ -37,6 +40,13 @@ class IndividualReward:
     """
     Preparation of the buffers
     """
+    def _prepare_buffer_velocity_smoothness_term_(self):
+        self.vel_smothness_buffer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                       requires_grad=False)
+        
+    def _prepare_buffer_limits_term_(self):
+        self.limits_buffer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                       requires_grad=False)
 
     def _prepare_buffer_smoothness_term_(self):
         self.prev_acc = None
@@ -129,6 +139,34 @@ class IndividualReward:
 
         self.changed_actions_buffer += difference 
         return difference
+    
+    def _compute_in_state_limits_term_(self, simulation_info, reward_data):
+        count_limit_vel = simulation_info[count_limit_vel_keyword]
+        count_limit_joint = simulation_info[count_joint_limits_keyword]
+
+        w_join = reward_data["joint_limits"]
+        w_vel = reward_data["velocity_limits"]
+        w_tot = reward_data["weight"]
+
+        in_state = w_tot*(w_join * count_limit_joint + w_vel * count_limit_vel)
+        self.limits_buffer += in_state
+
+        return in_state
+    
+    def _compute_in_state_velocity_smoothness_term_(self, simulation_info, reward_data):
+        velocity = simulation_info[joint_velocity_keyword]
+        acceleration = simulation_info[joint_acceleration_keyword]
+        w_acc = reward_data["weight_acc"]
+        w_vel = reward_data["weight_vel"]
+        w_tot = reward_data["weight"]
+
+        vel = torch.square(velocity)
+        acc = torch.square(acceleration)
+        
+        in_state = w_tot * torch.sum((w_vel * vel + w_acc * acc), dim=-1)
+        self.vel_smothness_buffer += in_state
+
+        return in_state
 
     def _compute_in_state_x_distance_term_(self, simulation_info, reward_data):
         previous_position = simulation_info[previous_position_keyword][:, 0]
@@ -381,6 +419,12 @@ class IndividualReward:
         else:
             return self.x_distance
     
+    def _compute_final_velocity_smoothness_term_(self, simulation_info, reward_data):
+        return self.vel_smothness_buffer
+    
+    def _compute_final_limits_term_(self, simulation_info, reward_data):
+        return self.limits_buffer
+
     def _compute_final_changed_actions_term_(self, simulation_info, reward_data):
         return self.changed_actions_buffer
 
@@ -490,6 +534,12 @@ class IndividualReward:
     def _clean_buffer_x_distance_(self):
         self.x_distance = None
         self.x_distance_step = None
+
+    def _clean_buffer_velocity_smoothness_(self):
+        self.vel_smothness_buffer.fill_(0)
+
+    def _clean_buffer_limits_(self):
+        self.limits_buffer.fill_(0)
 
     def _clean_buffer_changed_actions_(self):
         self.changed_actions_buffer.fill_(0)

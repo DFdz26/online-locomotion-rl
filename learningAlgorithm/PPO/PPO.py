@@ -26,7 +26,7 @@ class PPOArgs:
     entropy_coef = 0.005
     num_learning_epochs = 2  # 5
     # num_mini_batches = 1400  # mini batch size = num_envs*nsteps / nminibatches 400
-    num_mini_batches = 2000  # mini batch size = num_envs*nsteps / nminibatches 400
+    num_mini_batches = 3000  # mini batch size = num_envs*nsteps / nminibatches 400
     # num_mini_batches = 400  # mini batch size = num_envs*nsteps / nminibatches
     # learning_rate = 0.0000003  # 5.e-4 and 0.0000003
     # learning_rate = 0.00000012  # 5.e-4 and 0.0000003

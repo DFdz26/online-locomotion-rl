@@ -4,7 +4,7 @@
   },
   "asset_options": {
     "asset_folder": "../models/b1_mine/urdf",
-    "asset_filename": "b1_original.urdf",
+    "asset_filename": "b1_original_4.urdf",
     "asset_name": "b1",
     "dof_drive_mode": "FORCE",
     "terminate_after_contacts_on": ["thigh", "hip"],
@@ -14,7 +14,7 @@
     "initial_postion": {
       "y": 0.0,
       "x": 0.0,
-      "z": 0.58
+      "z": 0.72
     },
     "torque_limits": [
       90.0,
@@ -54,7 +54,7 @@
     },
     "gains_constants": {
       "Kp": {
-        "hip_joint": 620.0,
+        "hip_joint": 720.0,
         "thigh_joint": 420.0,
         "calf_joint": 420.0
       },

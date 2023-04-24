@@ -14,7 +14,8 @@ from .Rewards import rep_keyword, root_keyword, initial_keyword, projected_gravi
 from .Rewards import termination_contact_indices_keyword, penalization_contact_indices_keyword, goal_height_keyword
 from .Rewards import foot_contact_indices_keyword, joint_velocity_keyword, foot_velocity_keyword
 from .Rewards import base_lin_vel_keyboard, base_ang_vel_keyboard, base_previous_lin_vel_keyboard
-from .Rewards import previous_actions_keyword, current_actions_keyword
+from .Rewards import previous_actions_keyword, current_actions_keyword, joint_acceleration_keyword
+from .Rewards import count_limit_vel_keyword, count_joint_limits_keyword
 
 import time
 
@@ -127,6 +128,7 @@ class RobotConfig(BaseConfiguration):
         self.dof_pos = None
         self.dof_vel = None
         self.previous_dof_vel = None
+        self.aceeleration_dof = None
         self.base_quat = None
 
         self.__prepare_buffers()
@@ -161,6 +163,7 @@ class RobotConfig(BaseConfiguration):
 
         self.root_states[env_ids] = 0.
         self.surpasing_limits[env_ids] = 0.
+        self.surpassing_velocity_limits[env_ids] = 0.
 
         self.root_states[env_ids, :3] = self.started_position[env_ids]
         self.previous_robot_position[env_ids, :3] = self.root_states[:, :3].detach().clone()
@@ -191,6 +194,7 @@ class RobotConfig(BaseConfiguration):
             self.dof_pos[i] = self.default_dof_pos
             self.dof_vel[i] = 0.
             self.previous_dof_vel[i] = 0.
+            self.aceeleration_dof[i] = 0.
 
         env_ids_int32 = env_ids.to(dtype=torch.int32)
         self.gym.set_dof_state_tensor_indexed(self.sim,
@@ -254,7 +258,10 @@ class RobotConfig(BaseConfiguration):
             base_ang_vel_keyboard: self.base_ang_vel,
             base_previous_lin_vel_keyboard: self.previous_robot_velocity,
             previous_actions_keyword: self.previous_actions,
-            current_actions_keyword: self.actions
+            current_actions_keyword: self.actions,
+            joint_acceleration_keyword: self.aceeleration_dof,
+            count_limit_vel_keyword: self.surpassing_velocity_limits,
+            count_joint_limits_keyword: self.surpasing_limits,
         }
 
         return simulation_info
@@ -295,6 +302,7 @@ class RobotConfig(BaseConfiguration):
             self.check_termination()
 
         self.recorded_frames = self._get_cameras_frame()
+        self.aceeleration_dof = (self.dof_vel - self.previous_dof_vel)/((self.env_config.iterations_without_control + 1) *self.env_config.dt)
 
     def __prepare_distance_and_termination_rollout_buffers_(self):
         if not self.env_config.test_joints:
@@ -417,6 +425,7 @@ class RobotConfig(BaseConfiguration):
 
         self.finished = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
         self.previous_dof_vel = self.dof_vel.detach().clone()
+        self.aceeleration_dof = self.dof_vel.detach().clone()
 
         self.__prepare_distance_and_termination_rollout_buffers_()
 
@@ -431,6 +440,7 @@ class RobotConfig(BaseConfiguration):
 
         self.torque_limits = torch.tensor(self.cfg["asset_options"]["torque_limits"], requires_grad=False).to(self.device)
         self.surpasing_limits = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device, requires_grad=False)
+        self.surpassing_velocity_limits = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device, requires_grad=False)
 
     def __get_body_randomization_information(self, get_mass):
         if self.curricula is None:
@@ -525,8 +535,16 @@ class RobotConfig(BaseConfiguration):
         dangerous_space += (self.dof_pos - self.upper_limit_safe[:]).clip(min=0.)
 
         return torch.sum(dangerous_space, dim=1)
+    
+    def _check_velocity_limits(self):
+        self.dof_vel
+        self.surpassing_velocity_limits = torch.sum(self.dof_vel.ge(self.velocity_limits), dim=-1)
+        self.surpassing_velocity_limits |= torch.sum(self.dof_vel.le(-self.velocity_limits), dim=-1)
+        
+        self.dof_vel.clip(min=-self.velocity_limits, max=self.velocity_limits)
 
     def move_dofs(self, test_data, actions=None, position_control=True):
+        self._check_velocity_limits()
         self.controller(test_data, actions, default=self.default_pose, position_control=position_control)
 
         if self.env_config.test_joints and self.env_config.joint_to_test > 0:
@@ -537,6 +555,7 @@ class RobotConfig(BaseConfiguration):
         # print(f"torques: {self.torques}")
 
         self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self.torques))
+        
 
     def reset_simulation(self):
         self.reset_all_envs()
@@ -836,7 +855,8 @@ class RobotConfig(BaseConfiguration):
             self.default_dof_pos[i] = angle
 
         self.lower_limit = self.dof_prop_assets['lower']
-
+        self.velocity_limits = torch.tensor(self.dof_prop_assets['velocity'], requires_grad=False).to(self.device)
+        print(self.velocity_limits)
         self.upper_limit = self.dof_prop_assets['upper']
         self.default_friction = rigid_shape_props_asset[1].friction
         self.default_restitution = rigid_shape_props_asset[1].restitution

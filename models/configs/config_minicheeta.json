@@ -16,6 +16,20 @@
       "x": 0.0,
       "z": 0.32
     },
+    "torque_limits": [
+      100.0,
+      100.0,
+      100.0,
+      100.0,
+      100.0,
+      100.0,
+      100.0,
+      100.0,
+      100.0,
+      100.0,
+      100.0,
+      100.0
+    ],
     "asset_config": {
       "fix_base_link": false,
       "use_mesh_materials": true,

@@ -34,8 +34,8 @@ class Memory:
         # Simulation memory
         self.observations = torch.zeros(num_step_per_env, num_envs, observation_shape, device=self.device,
                                         requires_grad=False)
-        self.past_observations = torch.zeros(num_step_per_env, num_envs, past_observation_shape, device=self.device,
-                                        requires_grad=False)
+        # self.past_observations = torch.zeros(num_step_per_env, num_envs, past_observation_shape, device=self.device,
+                                        # requires_grad=False)
         self.observation_expert = torch.zeros(num_step_per_env, num_envs, expert_observation_shape, device=self.device,
                                               requires_grad=False)
         self.rewards = torch.zeros(num_step_per_env, num_envs, 1, device=self.device, requires_grad=False)
