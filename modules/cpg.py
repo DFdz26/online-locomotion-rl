@@ -34,18 +34,24 @@ class CPG(torchNet):
     def __init__(self, cpg_gamma=1.01, cpg_phi=0.5, tinit=100, device=None):
         # initialize network hyperparameter
         super().__init__(device)
+        self.__cpgweights = None
+        self.gamma = cpg_gamma
+        self.phi = cpg_phi
 
         self.__t_init = tinit
 
         # CPG
         self.__cpg = self.torch(np.array([[0.0], [0.2]]))
-        cpgweight = [[np.cos(cpg_phi), np.sin(cpg_phi)], [-np.sin(cpg_phi), np.cos(cpg_phi)]]
-        self.__cpgweights = self.torch(cpg_gamma * np.array(cpgweight))
-
-        self.reset()
+        self.set_cpg_weight(self.phi, self.cpg_gamma)
 
     # -------------------- handle functions -----------------------
     # (public)
+    def set_cpg_weight(self, cpg_phi, cpg_gamma, reset=True):
+        cpgweight = [[np.cos(cpg_phi), np.sin(cpg_phi)], [-np.sin(cpg_phi), np.cos(cpg_phi)]]
+        self.__cpgweights = self.torch(cpg_gamma * np.array(cpgweight))
+
+        if reset:
+            self.reset()
 
     def reset(self):
         self.__cpg = self.torch(np.array([[0.0], [0.2]]))

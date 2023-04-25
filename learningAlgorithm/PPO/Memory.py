@@ -10,7 +10,7 @@ class Memory:
             self.critic_observations = None
             self.values = None
             self.rewards = None
-
+            self.past_observations = None
             self.actions_log_prob = None
             self.action_mean = None
             self.action_sigma = None
@@ -30,12 +30,13 @@ class Memory:
 
         self.device = device
         self.actions_shape = actions_shape
+        self.past_observation_shape = past_observation_shape
 
         # Simulation memory
         self.observations = torch.zeros(num_step_per_env, num_envs, observation_shape, device=self.device,
                                         requires_grad=False)
-        # self.past_observations = torch.zeros(num_step_per_env, num_envs, past_observation_shape, device=self.device,
-                                        # requires_grad=False)
+        self.past_observations = torch.zeros(num_step_per_env, num_envs, past_observation_shape, device=self.device,
+                                             requires_grad=False)
         self.observation_expert = torch.zeros(num_step_per_env, num_envs, expert_observation_shape, device=self.device,
                                               requires_grad=False)
         self.rewards = torch.zeros(num_step_per_env, num_envs, 1, device=self.device, requires_grad=False)
@@ -56,6 +57,8 @@ class Memory:
 
         self.observations[self.step].copy_(step.observations)
         self.observation_expert[self.step].copy_(step.observation_expert)
+        if step.past_observations is not None:
+            self.past_observations[self.step].copy_(step.past_observations)
         self.dones[self.step].copy_(step.dones.view(-1, 1))
         self.actions[self.step].copy_(step.actions)
         self.rewards[self.step].copy_(step.rewards.view(-1, 1))
@@ -94,6 +97,7 @@ class Memory:
 
         observations = self.observations.flatten(0, 1)
         expert_observations = self.observation_expert.flatten(0, 1)
+        obs_history = self.past_observations.flatten(0, 1)
         critic_observations = observations
 
         actions = self.actions.flatten(0, 1)
@@ -111,6 +115,7 @@ class Memory:
                 batch_idx = indices[start:end]
 
                 obs_batch = observations[batch_idx]
+                obs_history_batch = obs_history[batch_idx]
                 expert_obs = expert_observations[batch_idx]
                 critic_observations_batch = critic_observations[batch_idx]
                 actions_batch = actions[batch_idx]
@@ -121,4 +126,4 @@ class Memory:
                 old_mu_batch = old_mu[batch_idx]
                 old_sigma_batch = old_sigma[batch_idx]
                 yield obs_batch, expert_obs, critic_observations_batch, actions_batch, target_values_batch, advantages_batch, \
-                      returns_batch, old_actions_log_prob_batch, old_mu_batch, old_sigma_batch
+                    returns_batch, old_actions_log_prob_batch, old_mu_batch, old_sigma_batch, obs_history_batch

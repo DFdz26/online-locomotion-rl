@@ -8,6 +8,7 @@ from learningAlgorithm.PIBB.PIBB import PIBB
 from isaacGymConfig.envConfig import EnvConfig
 # from isaacGymConfig.RobotConfig import RobotConfig
 from Runner import Runner
+from learningAlgorithm.PPO.History import History
 
 from modules.cpgrbfn2 import CPGRBFN
 from modules.logger import Logger
@@ -16,6 +17,7 @@ from isaacGymConfig.Rewards import Rewards
 from learningAlgorithm.PPO.ActorCritic import ActorCritic
 from learningAlgorithm.PPO.ActorCritic import NNCreatorArgs
 from learningAlgorithm.PPO.PPO import PPO
+from learningAlgorithm.PPO.PPO import PPOArgs
 
 from learningAlgorithm.PIBB.PIBB import PIBB
 
@@ -40,12 +42,14 @@ SAVE_DATA = True
 RECOVER_CPG = False
 LOAD_CACHE = True
 TERRAIN_CURRICULUM = True
+ACTIVATE_HISTORY = True
 # rollouts = 1500
 rollouts = 1250
 iterations_without_control = 1
 num_env_colums = 100
 # learning_rate_PPO = 0.0000003  # 0.0000003
 start_PPO_acting_iteration = 350
+num_prev_obs = 15
 device = "cuda:0"
 
 if RECOVER_CPG:
@@ -425,17 +429,19 @@ print(f"n_out: {n_out}")
 
 latent_space_size = 12
 priv_obs = 21
+n_observations = 45
+actor_input = n_observations + latent_space_size
 
 actorArgs = NNCreatorArgs()
 # actorArgs.inputs = [39]
-actorArgs.inputs = [45 + latent_space_size]
+actorArgs.inputs = [actor_input]
 # actorArgs.hidden_dim = [128, 64]
 # actorArgs.hidden_dim = [256, 128]
 actorArgs.hidden_dim = [512, 256]
 actorArgs.outputs = [n_out if not CURRICULUM_CPG_RBFN else 12]
 
 criticArgs = NNCreatorArgs()
-criticArgs.inputs = [45 + latent_space_size]
+criticArgs.inputs = [actor_input]
 # criticArgs.hidden_dim = [128, 64]
 criticArgs.hidden_dim = [512, 256]
 criticArgs.outputs = [1]
@@ -446,11 +452,20 @@ expertArgs.inputs = [priv_obs]
 expertArgs.hidden_dim = [32]
 expertArgs.outputs = [latent_space_size]
 
+studentArgs = NNCreatorArgs()
+studentArgs.inputs = [num_prev_obs * n_observations]
+# criticArgs.hidden_dim = [128, 64]
+studentArgs.hidden_dim = [64, 32]
+studentArgs.outputs = [latent_space_size]
+
 actor_std_noise = 1.
 
-actorCritic = ActorCritic(actorArgs, criticArgs, actor_std_noise, expertArgs, debug_mess=True,
+actorCritic = ActorCritic(actorArgs, criticArgs, actor_std_noise, expertArgs, studentArgs, debug_mess=True,
                           scale_max=2, scale_min=-2)
-ppo = PPO(actorCritic, device=device, verbose=True)
+
+ppo_cfg = PPOArgs()
+ppo_cfg.num_past_actions = num_prev_obs
+ppo = PPO(actorCritic, device=device, verbose=True, cfg=ppo_cfg)
 
 reward_obj = Rewards(rollouts, device, reward_list, 0.999999, step_env, discrete_rewards=True)
 pibb = PIBB(rollouts, h, 1, n_kernels * n_out, decay, variance, device="cuda:0", boost_noise=noise_boost)
@@ -473,9 +488,9 @@ learning_algorithm = PPO_PIBB(ppo, pibb, curricula)
 if RECOVER_CPG:
     learning_algorithm.read_data_point(cpg_filename, logger, policy, recover_MLP=False)
 
-
+history_obj = History(rollouts, num_prev_obs, observation_shape=n_observations, device=device)
 robot = Runner(policy, learning_algorithm, logger, config_file, env_config, reward_obj, n_out if not CURRICULUM_CPG_RBFN else 12,
-               terrain_obj, curricula=curricula, verbose=True, store_observations=True)
+               terrain_obj, curricula=curricula, verbose=True, store_observations=True, history_obj=history_obj)
 
 try:
     robot.learn(max_iterations, step_env)

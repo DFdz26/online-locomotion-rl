@@ -116,6 +116,7 @@ class PPO_PIBB:
                 'entropy': 0,
                 'lr': 0,
                 'kl_mean': 0,
+                'student_loss': 0,
             }
 
         mean_fitness = float(torch.mean(rw))
@@ -151,6 +152,7 @@ class PPO_PIBB:
         print(f"KL mean: {loss['kl_mean']}", end="\t")
         print(f"Loss mean: {loss['mean_loss']}", end="\t")
         print(f"Entropy: {loss['entropy']}")
+        print(f"Student loss: {loss['student_loss']}")
         print(f"PIBB::: variance: {self.PIBB.variance}")
         print(f"Total time (s): {total_time}")
         print(f"Rollout time (s): {rollout_time}")
@@ -169,7 +171,7 @@ class PPO_PIBB:
         self.PPO.prepare_training(num_envs, steps_per_env, observations, expert_obs, actions, policy.get_MLP())
         self.PIBB.prepare_training(num_envs, steps_per_env, observations, expert_obs, actions, policy.get_CPG_RBFN())
 
-    def post_step_simulation(self, obs, exp_obs, actions, reward, dones, info, closed_simulation):
+    def post_step_simulation(self, obs, exp_obs, prev_obs, actions, reward, dones, info, closed_simulation):
         if not closed_simulation:
             self.curricula.post_step_simulation(obs, exp_obs, actions, reward, dones, info, self.PPO, self.PIBB)
 
@@ -179,9 +181,9 @@ class PPO_PIBB:
     def get_noise(self):
         return self.PIBB.get_noise()
 
-    def act(self, observation, expert_obs):
+    def act(self, observation, expert_obs, history_obs):
         if self.test:
-            PPO_actions = self.PPO.act(observation, expert_obs)
+            PPO_actions = self.PPO.act(observation, expert_obs, history_obs)
             PIBB_actions = self.PIBB.act(observation, expert_obs)
 
             return 0.5 * PIBB_actions + 0.5 * PPO_actions

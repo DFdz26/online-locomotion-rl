@@ -23,8 +23,7 @@ class NNCreatorArgs:
 
 class ActorCritic(nn.Module):
 
-    def __init__(self, actorArgs, criticArgs, actor_std_noise, expertArgs, **kwargs):
-        studentArgs = []
+    def __init__(self, actorArgs, criticArgs, actor_std_noise, expertArgs, studentArgs, **kwargs):
 
         super().__init__()
         self.__default_values_kwargs__()
@@ -38,13 +37,13 @@ class ActorCritic(nn.Module):
             self.__actor_building__(actorArgs)
             self.__critic_building__(criticArgs)
             self.__expert_building__(expertArgs)
-            # self.__student_building__(studentArgs)
+            self.__student_building__(studentArgs)
 
             if self.debug_mess:
                 print(f"Actor MLP: {self.actor_NN}")
                 print(f"Critic MLP: {self.critic_NN}")
                 print(f"Expert MLP: {self.expert_NN}")
-                # print(f"Student MLP: {self.expert_NN}")
+                print(f"Student MLP: {self.student_NN}")
 
             # Action noise
             self.std = nn.Parameter(actor_std_noise * torch.ones(actorArgs.outputs[0]))
@@ -53,6 +52,7 @@ class ActorCritic(nn.Module):
             self.actor_NN = None
             self.critic_NN = None
             self.expert_NN = None
+            self.student_NN = None
 
             if self.debug_mess:
                 print(f"Actor critic and expert will be loaded.")
@@ -68,12 +68,16 @@ class ActorCritic(nn.Module):
         return [self.actor_NN, self.critic_NN, self.expert_NN, self.std]
 
     def load_weights(self, actor_critic):
-        self.actor_NN, self.critic_NN, self.expert_NN, self.std = actor_critic
+        try:
+            self.actor_NN, self.critic_NN, self.expert_NN, self.student_NN, self.std = actor_critic
+        except Exception as e:
+            self.actor_NN, self.critic_NN, self.expert_NN, self.std = actor_critic
 
         if self.debug_mess:
             print(f"Actor MLP: {self.actor_NN}")
             print(f"Critic MLP: {self.critic_NN}")
             print(f"Expert MLP: {self.expert_NN}")
+            print(f"Student MLP: {self.student_NN}")
 
     def forward(self):
         pass
@@ -108,6 +112,15 @@ class ActorCritic(nn.Module):
     def act(self, observations, expert_observations):
         self.update_distribution(observations, expert_observations)
         return self.distribution.sample()
+
+    def act_student(self, observations, history):
+        latent_space = self.student_NN(history)
+        selected_action = self.actor_NN(torch.cat((observations, latent_space), dim=-1))
+
+        if self.scale_output:
+            selected_action = self._scale_output(selected_action)
+
+        return selected_action
 
     def act_test(self, observations, expert_observations):
         latent_space = self.expert_NN(expert_observations)
@@ -145,6 +158,20 @@ class ActorCritic(nn.Module):
             self.scale_output = True
             self.range_scaled = accepted["scale_max"] - accepted["scale_min"]
             self.min_range = accepted["scale_min"]
+
+    def __student_building__(self, studentArgs):
+        if self.debug_mess:
+            print("Starting to build the Student")
+
+        layers = self.__generic_MLP_building__(studentArgs)
+
+        if self.debug_mess:
+            print("Creating the Student ...", end='  ')
+
+        self.student_NN = nn.Sequential(*layers)
+
+        if self.debug_mess:
+            print("Done")
 
     def __expert_building__(self, expertArgs):
         if self.debug_mess:

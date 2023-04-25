@@ -7,13 +7,17 @@ from modules.logger import Logger
 
 from isaacGymConfig.Rewards import Rewards
 from isaacGymConfig.Curriculum import Curriculum
+from learningAlgorithm.PPO.History import History
 
 
 class Runner:
     curricula: Curriculum
 
     def __init__(self, policy, learning_algorithm, logger: Logger, config_file, env_config, reward: Rewards,
-                 num_actions, terrain_config=None, curricula=None, verbose=False, store_observations=False):
+                 num_actions, terrain_config=None, curricula=None, verbose=False, store_observations=False,
+                 history_obj=None):
+        self.history_obj = history_obj
+        self.prev_obs = None
         self.agents = RobotConfig(config_file, env_config, reward, terrain_config, curricula, verbose)
         self.policy = policy
         self.logger = logger
@@ -42,9 +46,26 @@ class Runner:
             self.logger.store_algorithm_parameters(self.learning_algorithm.get_info_algorithm(get_PIBB=False))
 
         self.obs, self.obs_exp, self.closed_simulation = self.agents.reset_simulation()
+        self._store_history()
 
         if store_observations:
             self.num_observations, self.num_observation_sensor, self.num_expert_observation = self.agents.get_num_observations()
+
+    def _store_history(self):
+        if self.history_obj is not None:
+            self.prev_obs = self.history_obj.store_history(self.obs)
+
+    def _reset_history(self):
+        if self.history_obj is not None:
+            self.history_obj.reset_history()
+
+            self.prev_obs = self.history_obj.history
+
+    def _reset_specific_env_history(self, envs):
+        if self.history_obj is not None:
+            self.history_obj.reset_specific_history(envs)
+
+            self.prev_obs = self.history_obj.history
 
     def _stop_recording(self):
         if self.recording:
@@ -109,10 +130,11 @@ class Runner:
 
             for step in range(steps_per_iteration):
 
-                actions = self.learning_algorithm.act(self.obs, self.obs_exp)
+                actions = self.learning_algorithm.act(self.obs, self.obs_exp, self.prev_obs)
 
                 self.obs, self.obs_exp, actions, reward, dones, info, closed_simulation = self.agents.step(None,
                                                                                                            actions)
+                self._store_history()
                 self.learning_algorithm.post_step_simulation(self.obs, self.obs_exp, actions, reward * 0.5, dones, info,
                                                              closed_simulation)
                 self._recording_process()
@@ -147,7 +169,9 @@ class Runner:
                 # Reset the environments, the reward buffers and get the first observation
                 self.rewards.clean_buffers()
                 self.agents.reset_all_envs()
+                self._reset_history()
                 self.obs, self.obs_exp = self.agents.create_observations()
+                self._store_history()
 
     def test_agent(self, iterations, steps_per_iteration):
         closed_simulation = False

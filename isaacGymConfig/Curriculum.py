@@ -513,7 +513,7 @@ class AlgorithmCurriculum:
 
         return steps_per_iteration
 
-    def get_curriculum_action(self, PPO, PIBB, observations, expert_obs):
+    def get_curriculum_action(self, PPO, PIBB, observations, expert_obs, previous_obs):
         actions = None
 
         if self.PIBB_activated:
@@ -522,7 +522,7 @@ class AlgorithmCurriculum:
             actions = actions_CPG
 
         if self.PPO_activated:
-            actions_PPO = PPO.act(observations, expert_obs, actions_mult=1.)
+            actions_PPO = PPO.act(observations, expert_obs, previous_obs, actions_mult=1.)
 
             # Scale the output to be [-2, 2]
             # for i in range(len(actions_PPO)):
@@ -730,9 +730,9 @@ class Curriculum:
         if not (self.algorithm_curriculum is None):
             self.algorithm_curriculum.last_step_learning(obs, exp_obs, PIBB, PPO)
 
-    def act_curriculum(self, observation, expert_obs, PPO, PIBB):
+    def act_curriculum(self, observation, expert_obs, prev_obs, PPO, PIBB):
         if not (self.algorithm_curriculum is None):
-            return self.algorithm_curriculum.get_curriculum_action(PPO, PIBB, observation, expert_obs)
+            return self.algorithm_curriculum.get_curriculum_action(PPO, PIBB, observation, expert_obs, prev_obs)
 
         return None
 
