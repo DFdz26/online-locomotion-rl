@@ -227,7 +227,6 @@ def config_terrain(env_config):
         seventh_curr = start_PPO_acting_iteration + 600 + delay # 1750
         eight_curr = start_PPO_acting_iteration + 700 + delay # 1750
         curriculum_terr.Control.threshold = {
-            6: False, 
             first_curr: False, 
             second_curr: False, 
             third_curr:False, 
