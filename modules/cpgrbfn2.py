@@ -326,6 +326,9 @@ class CPGRBFN(torchNet):
         # 	# self.outputs[0][5 + 6*i] = motor2[0][2 + 6*i]
 
         return self.outputs
+    
+    def get_last_rbfn_activations(self):
+        return self.bf, self.bf_delayed
 
     @staticmethod
     def HyperParams(n_states, n_in, n_out):

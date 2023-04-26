@@ -524,6 +524,7 @@ class AlgorithmCurriculum:
 
         if self.PIBB_activated:
             actions_CPG = PIBB.act(observations, expert_obs) * 1.
+            rbfn, rbfn_delayed = PIBB.get_rbf_activations()
 
             actions = actions_CPG
 

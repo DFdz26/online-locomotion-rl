@@ -486,13 +486,13 @@ actorArgs = NNCreatorArgs()
 actorArgs.inputs = [actor_input]
 # actorArgs.hidden_dim = [128, 64]
 # actorArgs.hidden_dim = [256, 128]
-actorArgs.hidden_dim = [256, 128]
+actorArgs.hidden_dim = [128, 64]
 actorArgs.outputs = [n_out if not CURRICULUM_CPG_RBFN else 12]
 
 criticArgs = NNCreatorArgs()
 criticArgs.inputs = [actor_input]
 # criticArgs.hidden_dim = [128, 64]
-criticArgs.hidden_dim = [512, 256]
+criticArgs.hidden_dim = [128, 64]
 criticArgs.outputs = [1]
 
 expertArgs = NNCreatorArgs()
@@ -507,7 +507,7 @@ expertArgs.outputs = [latent_space_size]
 studentArgs = NNCreatorArgs()
 studentArgs.inputs = [num_prev_obs * n_observations]
 # criticArgs.hidden_dim = [128, 64]
-studentArgs.hidden_dim = [129, 64]
+studentArgs.hidden_dim = [128, 64]
 studentArgs.outputs = [latent_space_size]
 
 actor_std_noise = 1.

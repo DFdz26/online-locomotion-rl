@@ -40,6 +40,9 @@ class PIBB(object):
 
     def get_h(self):
         return self.h
+    
+    def get_rbf_activations(self):
+        return self.policy.get_last_rbfn_activations()
 
     def load_policy_weights(self, weights):
         self.policy.load_weights(weights)
