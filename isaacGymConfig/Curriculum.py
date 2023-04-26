@@ -435,7 +435,7 @@ class AlgorithmCurriculum:
         rw_weights["x_velocity"]["weight"] *= 1.
         rw_weights["smoothness"]["weight"] *= 2.
         rw_weights["velocity_smoothness"]["weight"] *= 2.
-        rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 1300.  # 1200
+        rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 1210.  # 1200
         # rw_weights["changed_actions"]["weight"] *= 2.5
         #rw_weights["height_error"]["weight"] /= 2
 

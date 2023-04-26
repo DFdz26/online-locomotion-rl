@@ -217,7 +217,7 @@ def config_terrain(env_config):
         curriculum_terr = TerrainCurrCfg()
 
         curriculum_terr.object = terrain_obj
-        delay = 600
+        delay = 0 
         first_curr = start_PPO_acting_iteration + 70 + delay
         second_curr = start_PPO_acting_iteration + 120 + delay
         third_curr = start_PPO_acting_iteration + 180 + delay
@@ -486,7 +486,7 @@ actorArgs = NNCreatorArgs()
 actorArgs.inputs = [actor_input]
 # actorArgs.hidden_dim = [128, 64]
 # actorArgs.hidden_dim = [256, 128]
-actorArgs.hidden_dim = [512, 256]
+actorArgs.hidden_dim = [256, 128]
 actorArgs.outputs = [n_out if not CURRICULUM_CPG_RBFN else 12]
 
 criticArgs = NNCreatorArgs()
@@ -499,7 +499,7 @@ expertArgs = NNCreatorArgs()
 expertArgs.inputs = [priv_obs]
 # criticArgs.hidden_dim = [128, 64]
 if ACTIVATE_HEIGHT_READ:
-    expertArgs.hidden_dim = [64, 32]
+    expertArgs.hidden_dim = [128, 64]
 else:
     expertArgs.hidden_dim = [32]
 expertArgs.outputs = [latent_space_size]
@@ -507,7 +507,7 @@ expertArgs.outputs = [latent_space_size]
 studentArgs = NNCreatorArgs()
 studentArgs.inputs = [num_prev_obs * n_observations]
 # criticArgs.hidden_dim = [128, 64]
-studentArgs.hidden_dim = [64, 32]
+studentArgs.hidden_dim = [129, 64]
 studentArgs.outputs = [latent_space_size]
 
 actor_std_noise = 1.
