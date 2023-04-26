@@ -45,6 +45,9 @@ class PPO_PIBB:
         self.curricula = Curricula
         self.test = True
         self.learnt_weight = {}
+        self.PPO_info = None
+        self.gamma_PPO = 0.
+        self.rep = 0
 
         if learnt_weights is None:
             self.test = False
@@ -106,8 +109,37 @@ class PPO_PIBB:
     def update(self, policy, rewards):
 
         return self.curricula.update_algorithm(policy, rewards, self.PPO, self.PIBB)
+    
+    def _get_curriculum_levels(self):
+        if self.curricula is None:
+            return 0, 0, 0
+        
+        self.curricula.get_levels_curriculum()
+    
+    def get_last_PPO_info_for_logger(self):
+        if self.PPO_info is None:
+            return None
+        
+        terrain, rand = self.curricula.get_levels_curriculum()
+        
+        ppo_logger = {
+            "gamma": self.gamma_PPO,
+            "lr": self.PPO_info["lr"],
+            "surrogate_loss": self.PPO_info["mean_surrogate_loss"],
+            "value_loss": self.PPO_info["mean_value_loss"],
+            "entropy": float(self.PPO_info["entropy"]),
+            "student_loss": self.PPO_info["student_loss"],
+            "terrain_curriculum": terrain,
+            "loss_mean": self.PPO_info["mean_loss"],
+            "time_steps_PPO": self.rep,
+        }
+
+        return ppo_logger
 
     def print_info(self, rw, rep, total_time, rollout_time, loss):
+        self.PPO_info = loss
+        self.rep = rep
+
         if loss is None:
             loss = {
                 'mean_surrogate_loss': 0,
@@ -171,7 +203,7 @@ class PPO_PIBB:
         self.PPO.prepare_training(num_envs, steps_per_env, observations, expert_obs, actions, policy.get_MLP())
         self.PIBB.prepare_training(num_envs, steps_per_env, observations, expert_obs, actions, policy.get_CPG_RBFN())
 
-    def post_step_simulation(self, obs, exp_obs, prev_obs, actions, reward, dones, info, closed_simulation):
+    def post_step_simulation(self, obs, exp_obs, actions, reward, dones, info, closed_simulation):
         if not closed_simulation:
             self.curricula.post_step_simulation(obs, exp_obs, actions, reward, dones, info, self.PPO, self.PIBB)
 
@@ -180,17 +212,25 @@ class PPO_PIBB:
 
     def get_noise(self):
         return self.PIBB.get_noise()
+    
+    def get_PPO_data(self):
+        ppo_data = None
+
 
     def act(self, observation, expert_obs, history_obs):
         if self.test:
             PPO_actions = self.PPO.act(observation, expert_obs, history_obs)
             PIBB_actions = self.PIBB.act(observation, expert_obs)
+            self.gamma_PPO = 0.5
 
-            return 0.5 * PIBB_actions + 0.5 * PPO_actions
+            return 0.5 * PIBB_actions + self.gamma_PPO * PPO_actions
             # return PIBB_actions 
             # return self.learnt_weight["PPO"]* PPO_actions 
         else:
-            return self.curricula.act_curriculum(observation, expert_obs, self.PPO, self.PIBB)
+            action = self.curricula.act_curriculum(observation, expert_obs, history_obs, self.PPO, self.PIBB)
+            self.gamma_PPO = self.curricula.algorithm_curriculum.gamma
+
+            return action
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import os
 import json
 from isaacgym import gymapi
+from isaacgym import gymutil
 from isaacgym import gymtorch
 from isaacgym.torch_utils import *
 import math
@@ -67,6 +68,7 @@ class RobotConfig(BaseConfiguration):
         self.upper_limits_joint = None
         self.lower_limits_joint = None
         self.surpasing_limits = None
+        self.height_samples = None
 
         self.rewards = rewards
         self.config_intial_position = [self.cfg["asset_options"]["initial_postion"][axis]
@@ -146,14 +148,23 @@ class RobotConfig(BaseConfiguration):
         return self.asset_name
 
     def _create_terrain_(self):
-
         if self.terrain_config is None:
             plane_params = gymapi.PlaneParams()
             plane_params.normal = gymapi.Vec3(0, 0, 1)
             self.gym.add_ground(self.sim, plane_params)
+            self.terr_horizontal_scale = 1.
+            self.terr_vertical_scale = 1.
+            self.terr_border_x = 0.
+            self.terr_border_y = 0.
         else:
             tm_params, vertices, triangles = self.terrain_config.build_terrain()
             self.gym.add_triangle_mesh(self.sim, vertices.flatten(), triangles.flatten(), tm_params)
+            self.terr_horizontal_scale = self.terrain_config.config.horizontal_scale
+            self.terr_vertical_scale = self.terrain_config.config.vertical_scale
+            self.terr_border_x = self.terrain_config.offset_x
+            self.terr_border_y = self.terrain_config.offset_y
+            self.height_samples = torch.tensor(self.terrain_config.map_heightfield).view(self.terrain_config.tot_rows,
+                                                                                         self.terrain_config.tot_columns).to(self.device)
 
     def _reset_root(self):
 
@@ -275,19 +286,23 @@ class RobotConfig(BaseConfiguration):
     def _init_height_points(self, env_ids):
         """ Returns points at which the height measurments are sampled (in base frame)
         Returns:
-            [torch.Tensor]: Tensor of shape (num_envs, self.num_height_points, 3)
+            [torch.Tensor]: Tensor of shape (num_envs, self.num_points, 3)
         """
-        y = torch.tensor(self.env_config.sensors.height_sensor.y_points, device=self.device, requires_grad=False)
-        x = torch.tensor(self.env_config.sensors.height_sensor.x_points, device=self.device, requires_grad=False)
+        y_mesh = [y_point * self.env_config.sensors.HeightMeasurement.y_scale for y_point in self.env_config.sensors.HeightMeasurement.y_mesh]
+        x_mesh = [x_point * self.env_config.sensors.HeightMeasurement.x_scale for x_point in self.env_config.sensors.HeightMeasurement.x_mesh]
+        y = torch.tensor(y_mesh, device=self.device, requires_grad=False)
+        x = torch.tensor(x_mesh, device=self.device, requires_grad=False)
         grid_x, grid_y = torch.meshgrid(x, y)
 
         self.num_points = grid_x.numel()
         points = torch.zeros(len(env_ids), self.num_points, 3, device=self.device, requires_grad=False)
         points[:, :, 0] = grid_x.flatten()
         points[:, :, 1] = grid_y.flatten()
+        # TODO: change this
+        self.num_envs_torch = torch.arange(self.num_envs, device=self.device)
         return points
 
-    def _get_heights(self, env_ids, cfg):
+    def _get_heights(self, env_ids):
         """ Samples heights of the terrain at required points around each robot.
             The points are offset by the base's position and rotated by the base's yaw
         Args:
@@ -298,13 +313,16 @@ class RobotConfig(BaseConfiguration):
             [type]: [description]
         """
         if self.curricula is None:
-            return torch.zeros(len(env_ids), cfg.env.num_height_points, device=self.device, requires_grad=False)
+            return torch.zeros(len(env_ids), self.num_points, device=self.device, requires_grad=False)
 
-        points = quat_apply_yaw(self.base_quat[env_ids].repeat(1, cfg.env.num_height_points),
+        points = quat_apply_yaw(self.base_quat[env_ids].repeat(1, self.num_points),
                                 self.height_points[env_ids]) + (self.root_states[env_ids, :3]).unsqueeze(1)
 
-        points += self.terrain.cfg.border_size
-        points = (points / self.terrain.cfg.horizontal_scale).long()
+        points[:, :, 0] -= self.terr_border_x
+        # points[:, :, 1] -= self.terr_border_y
+        points[:, :, 1] -= self.terr_border_y
+        # points += 2
+        points = (points / self.terr_horizontal_scale).long()
         px = points[:, :, 0].view(-1)
         py = points[:, :, 1].view(-1)
         px = torch.clip(px, 0, self.height_samples.shape[0] - 2)
@@ -313,10 +331,12 @@ class RobotConfig(BaseConfiguration):
         heights1 = self.height_samples[px, py]
         heights2 = self.height_samples[px + 1, py]
         heights3 = self.height_samples[px, py + 1]
+        # print("AAAAAAAAA")
+        # print(self.height_samples)
         heights = torch.min(heights1, heights2)
         heights = torch.min(heights, heights3)
 
-        return heights.view(len(env_ids), -1) * self.terrain.cfg.vertical_scale
+        return heights.view(len(env_ids), -1) * self.terr_vertical_scale
 
     def post_step(self):
         if self.recording_in_progress:
@@ -330,6 +350,11 @@ class RobotConfig(BaseConfiguration):
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
         self.foot_velocities = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13
                                                           )[:, self.feet_indices, 7:10]
+        
+        if self.env_config.sensors.Activations.height_measurement_activated:
+            self.measured_heights = self._get_heights(self.num_envs_torch)
+            # print(self.height_points)
+            # self._draw_debug_vis()
 
         if not self.env_config.test_joints:
             self.foot_positions = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices,
@@ -721,6 +746,14 @@ class RobotConfig(BaseConfiguration):
             dim=-1
         )
 
+        if self.env_config.sensors.Activations.height_measurement_activated:
+            heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * 5.0
+            expert = torch.cat(
+                (expert,
+                 heights),
+                dim=-1
+            )
+
         # scale all the randomization from -1 to 1
         scales_shift = None
 
@@ -884,6 +917,8 @@ class RobotConfig(BaseConfiguration):
         asset_options.max_angular_velocity = 1000.
         asset_options.max_linear_velocity = 1000.
         asset_options.flip_visual_attachments = False
+        asset_options.replace_cylinder_with_capsule  = True
+        asset_options.collapse_fixed_joints  = True
 
         self.robot_assets = self.gym.load_asset(self.sim, self.asset_root, self.asset_file, asset_options)
 
@@ -1006,6 +1041,26 @@ class RobotConfig(BaseConfiguration):
 
         if not (self.curricula is None):
             self.curricula.set_initial_positions(self.started_position)
+
+    def _draw_debug_vis(self):
+        """ Draws visualizations for dubugging (slows down simulation a lot).
+            Default behaviour: draws height measurement points
+        """
+        # draw height lines
+
+        self.gym.clear_lines(self.viewer)
+        self.gym.refresh_rigid_body_state_tensor(self.sim)
+        sphere_geom = gymutil.WireframeSphereGeometry(0.02, 4, 4, None, color=(1, 1, 0))
+        for i in range(self.num_envs):
+            base_pos = (self.root_states[i, :3]).cpu().numpy()
+            heights = self.measured_heights[i].cpu().numpy()
+            height_points = quat_apply_yaw(self.base_quat[i].repeat(heights.shape[0]), self.height_points[i]).cpu().numpy()
+            for j in range(heights.shape[0]):
+                x = height_points[j, 0] + base_pos[0]
+                y = height_points[j, 1] + base_pos[1]
+                z = heights[j]
+                sphere_pose = gymapi.Transform(gymapi.Vec3(x, y, z), r=None)
+                gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], sphere_pose) 
 
     def __del__(self):
         if not (self.viewer is None):

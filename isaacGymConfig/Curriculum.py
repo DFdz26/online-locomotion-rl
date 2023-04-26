@@ -71,6 +71,7 @@ class RandomizationCurriculum:
 
         self.updates = 0
         self.iteration = 0
+        self.level_rand = 0
 
         self.randomization_activated = cfg.Control.randomization_activated
         self.starting_iteration = cfg.Control.start_randomization_iteration
@@ -99,6 +100,9 @@ class RandomizationCurriculum:
             _max = default_value * (1 + _max/100)
 
         return [_min, _max]
+    
+    def get_level(self):
+        return self.level_rand
 
     def get_scales_shift(self, default_motor_strength=1., default_kp=None, default_kd=None):
         if not self.range_changed:
@@ -294,6 +298,7 @@ class RandomizationCurriculum:
         self.friction_range = self._increase_range(self.friction_range,
                                                    model_parameters.friction_range,
                                                    model_parameters.step_randomization_friction)
+        self.level_rand += 1
 
     def set_control_parameters(self, iterations):
         if not self.randomization_activated:
@@ -312,6 +317,7 @@ class RandomizationCurriculum:
         if not self.started and self.starting_iteration == iterations:
             self.started = True
             activated = True
+            self.level_rand = 1
 
         if self.started and self.updates % self.cfg.Control.randomization_interval_iterations == 0:
             return True, activated
@@ -429,7 +435,7 @@ class AlgorithmCurriculum:
         rw_weights["x_velocity"]["weight"] *= 1.
         rw_weights["smoothness"]["weight"] *= 2.
         rw_weights["velocity_smoothness"]["weight"] *= 2.
-        rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 1200.  # 700
+        rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 1300.  # 1200
         # rw_weights["changed_actions"]["weight"] *= 2.5
         #rw_weights["height_error"]["weight"] /= 2
 
@@ -535,6 +541,8 @@ class AlgorithmCurriculum:
             else:
                 actions = self.CPG_influence * actions + (1 -self.CPG_influence) * actions_PPO
 
+        self.gamma = (1 - self.CPG_influence)
+
         return actions
 
     def update_curriculum_learning(self, policy, rewards, PPO, PIBB):
@@ -606,6 +614,9 @@ class TerrainCurriculum:
         self.n_jumps = 0
         self.max_difficulty = 0
 
+    def get_level(self):
+        return self.control_step
+
     def set_initial_position(self, initial_position):
         self.initial_position = initial_position.detach().clone()
 
@@ -628,6 +639,8 @@ class TerrainCurriculum:
     def jump_env_to_terrain(self, env, terrain, initial_position):
         terrain = terrain if terrain < self.steps else self.steps
         initial_position[0] = self.initial_position[env, 0] + self.width_terrains * terrain
+        max_z = self.object.get_individual_max_z(initial_position)
+        initial_position[2] = self.initial_position[env, 2] + max_z
 
         return initial_position
 
@@ -800,4 +813,11 @@ class Curriculum:
     def get_levels_curriculum(self):
         terrain = 0
         randomization = 0
-        algorithm = 0
+
+        if not (self.terrain_curriculum is None):
+            terrain = self.terrain_curriculum.get_level()
+
+        if not (self.randomization_curriculum is None):
+            randomization = self.randomization_curriculum.get_level()
+
+        return terrain, randomization

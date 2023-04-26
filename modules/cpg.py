@@ -42,7 +42,7 @@ class CPG(torchNet):
 
         # CPG
         self.__cpg = self.torch(np.array([[0.0], [0.2]]))
-        self.set_cpg_weight(self.phi, self.cpg_gamma)
+        self.set_cpg_weight(self.phi, self.gamma)
 
     # -------------------- handle functions -----------------------
     # (public)

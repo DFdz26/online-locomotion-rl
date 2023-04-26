@@ -37,6 +37,8 @@ class TerrainComCfg:
     columns = 1
     border_x = -2
     border_y = 2
+    # border_x = 0
+    # border_y = 0
 
 
 class Terrain:
@@ -62,6 +64,8 @@ class Terrain:
         self.map_heightfield = None
         self.observation_terrain = torch.zeros(self.num_envs, len(self.terrain_list),
                                                device=self.device, requires_grad=False)
+        self.tot_columns = 0
+        self.tot_rows = 0
         self._config_terrain_()
 
     def get_info_terrain(self, positions):
@@ -152,7 +156,7 @@ class Terrain:
 
         self.information_terrain.append(info)
 
-        return terrain_utils.wave_terrain(
+        return info, terrain_utils.wave_terrain(
             self._sub_terrain_(),
             num_waves=config['num_waves'],
             amplitude=config['amplitude']).height_field_raw
@@ -166,7 +170,7 @@ class Terrain:
 
         self.information_terrain.append(info)
 
-        return terrain_utils.stairs_terrain(
+        return info, terrain_utils.stairs_terrain(
             self._sub_terrain_(),
             step_width=config['step_width'],
             step_height=config['step_height']).height_field_raw
@@ -202,8 +206,10 @@ class Terrain:
             platform_size=config['platform_size']).height_field_raw
 
     def build_terrain(self):
+        self.tot_columns = self.num_cols * self.config.columns
+        self.tot_rows = self.rows * self.num_rows
 
-        heightfield = np.zeros((self.rows * self.num_rows, self.num_cols * self.config.columns), dtype=np.int16)
+        heightfield = np.zeros((self.tot_rows , self.tot_columns), dtype=np.int16)
 
         for i, dic in enumerate(self.terrain_list):
 
@@ -230,9 +236,11 @@ class Terrain:
         tm_params.nb_triangles = triangles.shape[0]
 
         # tm_params.transform.r = gymapi.Quat(0., 0., 0., 0.)
+        self.offset_x = self.config.border_x
+        self.offset_y = int(self.config.border_y - self.config.terrain_length * self.config.columns)
         tm_params.transform.r = gymapi.Quat(0, 0.0, 0.0, 1)
-        tm_params.transform.p.x = self.config.border_x
-        tm_params.transform.p.y = self.config.border_y - self.config.terrain_length * self.config.columns
+        tm_params.transform.p.x = self.offset_x
+        tm_params.transform.p.y = self.offset_y
         self.map_heightfield = heightfield
 
         # self.information_terrain = torch.FloatTensor(self.information_terrain).to(self.device)
@@ -241,12 +249,28 @@ class Terrain:
 
     def get_max_z_heightfield(self, env_position):
 
-        x1 = (int(env_position[:, 0]) - 1) * self.config.horizontal_scale
-        x2 = (int(env_position[:, 0]) + 1) * self.config.horizontal_scale
-        y1 = (int(env_position[:, 1]) - 1) * self.config.horizontal_scale
-        y2 = (int(env_position[:, 1]) + 1) * self.config.horizontal_scale
+        x1 = int((env_position[:, 0] - 1) * self.config.horizontal_scale) + self.offset_x
+        x2 = int((env_position[:, 0] + 1) * self.config.horizontal_scale) + self.offset_x
+        y1 = int((env_position[:, 1] - 1) * self.config.horizontal_scale) + self.offset_y
+        y2 = int((env_position[:, 1] + 1) * self.config.horizontal_scale) + self.offset_y
 
         max_z = torch.max(self.map_heightfield[x1:x2, y1:y2]) * self.config.vertical_scale
+
+        return max_z
+    
+    def get_individual_max_z(self, env_position):
+        x1 = int((env_position[0] - 1) * self.config.horizontal_scale) + self.offset_x
+        x2 = int((env_position[0] + 1) * self.config.horizontal_scale) + self.offset_x
+        y1 = int((env_position[1] - 1) * self.config.horizontal_scale) + self.offset_y
+        y2 = int((env_position[1] + 1) * self.config.horizontal_scale) + self.offset_y
+
+        if x1 == x2:
+            x2 += 1
+
+        if y1 == y2:
+            y2 += 1
+
+        max_z = np.max(self.map_heightfield[x1:x2, y1:y2]) * self.config.vertical_scale
 
         return max_z
 

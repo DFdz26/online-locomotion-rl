@@ -26,8 +26,8 @@ class Sensors:
     class HeightMeasurement:
         # Default config in x: 10-50cm on each side
         # Default config in y: 20-80cm on each side
-        x_mesh = [-5, -4, -3, -2, -1, 1, 2, 3, 4, 5]
-        y_mesh = [-8, -6, -4, -2, 2, 4, 6, 8]
+        x_mesh = [-6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6, 7]
+        y_mesh = [-4, -2, 2, 4]
 
         x_scale = 0.1
         y_scale = 0.1

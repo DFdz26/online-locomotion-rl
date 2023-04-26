@@ -34,7 +34,10 @@ config_file = "models/configs/config_b1.json"
 graph_name = "graph_b1_learning"
 
 ACTIVE_RECORDING_CAMERA = True
+ACTIVATE_HEIGHT_READ = True
 frequency_recording = 50
+frequency_logger = 50
+frequency_plot = 5
 
 CURRICULUM_CPG_RBFN = True
 RENDER_GUI = False
@@ -49,8 +52,10 @@ iterations_without_control = 1
 num_env_colums = 100
 # learning_rate_PPO = 0.0000003  # 0.0000003
 start_PPO_acting_iteration = 350
+num_mini_batches = 2100
 num_prev_obs = 15
 device = "cuda:0"
+show_PPO_graph = True
 
 if RECOVER_CPG:
     start_PPO_acting_iteration = 1
@@ -150,13 +155,6 @@ def config_terrain(env_config):
         },
         {
             "terrain": "random_uniform_terrain",
-            "min_height": -0.05,
-            "max_height": 0.05,
-            "step": 0.025,
-            "downsampled_scale": 0.5
-        },
-        {
-            "terrain": "random_uniform_terrain",
             "min_height": -0.06,
             "max_height": 0.06,
             "step": 0.03,
@@ -168,8 +166,42 @@ def config_terrain(env_config):
             "max_height": 0.075,
             "step": 0.025,
             "downsampled_scale": 0.5
-        }
+        },
+        {
+            "terrain": "random_uniform_terrain",
+            "min_height": -0.15,
+            "max_height": 0.15,
+            "step": 0.025,
+            "downsampled_scale": 0.5
+        },
+        # # 
+        # #     "terrain": "wave_terrain",
+        # #     "num_waves": 2.,
+        # #     "amplitude": 0.4,
+        # #     "downsampled_scale": 0.5
+        # # },
+        {
+            "terrain": "stairs_terrain",
+            "step_width": 0.5,
+            "step_height": 0.15,
+            "downsampled_scale": 0.5
+        },
+        {
+            "terrain": "random_uniform_terrain",
+            "min_height": -0.3,
+            "max_height": 0.3,
+            "step": 0.025,
+            "downsampled_scale": 0.5
+        },
+        # {
+        #     "terrain": "random_uniform_terrain",
+        #     "min_height": -0.3,
+        #     "max_height": 0.3,
+        #     "step": 0.025,
+        #     "downsampled_scale": 0.5
+        # }
     ]
+
 
     terrain_com_conf = TerrainComCfg()
 
@@ -185,13 +217,25 @@ def config_terrain(env_config):
         curriculum_terr = TerrainCurrCfg()
 
         curriculum_terr.object = terrain_obj
-        delay = 0
+        delay = 600
         first_curr = start_PPO_acting_iteration + 70 + delay
         second_curr = start_PPO_acting_iteration + 120 + delay
         third_curr = start_PPO_acting_iteration + 180 + delay
         fourth_curr = start_PPO_acting_iteration + 240  + delay # 700
-        fifth_curr = start_PPO_acting_iteration + 400 + delay # 1750
-        curriculum_terr.Control.threshold = {first_curr: False, second_curr: False, third_curr:False, fourth_curr:True, fifth_curr:True}
+        fifth_curr = start_PPO_acting_iteration + 360 + delay # 1750
+        six_curr = start_PPO_acting_iteration + 470 + delay # 1750
+        seventh_curr = start_PPO_acting_iteration + 600 + delay # 1750
+        eight_curr = start_PPO_acting_iteration + 700 + delay # 1750
+        curriculum_terr.Control.threshold = {
+            6: False, 
+            first_curr: False, 
+            second_curr: False, 
+            third_curr:False, 
+            fourth_curr:False, 
+            fifth_curr:False, 
+            six_curr:False, 
+            seventh_curr:False,
+            eight_curr:False}
         curriculum_terr.percentage_step = 0.32
     else:
         curriculum_terr = None
@@ -207,6 +251,8 @@ def config_env():
     env_config.num_env_colums = num_env_colums
     env_config.render_GUI = RENDER_GUI
     env_config.iterations_without_control = iterations_without_control
+
+    env_config.sensors.Activations.height_measurement_activated = ACTIVATE_HEIGHT_READ
 
     env_config.cfg_observations.enable_observe_friction = False
     env_config.cfg_observations.enable_observe_restitution = False
@@ -429,6 +475,10 @@ print(f"n_out: {n_out}")
 
 latent_space_size = 12
 priv_obs = 21
+
+if ACTIVATE_HEIGHT_READ:
+    priv_obs += 52
+
 n_observations = 45
 actor_input = n_observations + latent_space_size
 
@@ -449,7 +499,10 @@ criticArgs.outputs = [1]
 expertArgs = NNCreatorArgs()
 expertArgs.inputs = [priv_obs]
 # criticArgs.hidden_dim = [128, 64]
-expertArgs.hidden_dim = [32]
+if ACTIVATE_HEIGHT_READ:
+    expertArgs.hidden_dim = [64, 32]
+else:
+    expertArgs.hidden_dim = [32]
 expertArgs.outputs = [latent_space_size]
 
 studentArgs = NNCreatorArgs()
@@ -465,6 +518,7 @@ actorCritic = ActorCritic(actorArgs, criticArgs, actor_std_noise, expertArgs, st
 
 ppo_cfg = PPOArgs()
 ppo_cfg.num_past_actions = num_prev_obs
+ppo_cfg.num_mini_batches = num_mini_batches
 ppo = PPO(actorCritic, device=device, verbose=True, cfg=ppo_cfg)
 
 reward_obj = Rewards(rollouts, device, reward_list, 0.999999, step_env, discrete_rewards=True)
@@ -472,7 +526,7 @@ pibb = PIBB(rollouts, h, 1, n_kernels * n_out, decay, variance, device="cuda:0",
 env_config = EnvConfig()
 config_env()
 
-logger = Logger(save=SAVE_DATA, frequency=100, PIBB_param=pibb.get_hyper_parameters(), nn_config=config)
+logger = Logger(save=SAVE_DATA, frequency=frequency_logger, frequency_plot=frequency_plot, PIBB_param=pibb.get_hyper_parameters(), nn_config=config, show_PPO_graph=show_PPO_graph)
 config_camera(ACTIVE_RECORDING_CAMERA, env_config, logger, step_env, int(1/0.01))
 
 terrain_obj, terrain_curr = config_terrain(env_config)
@@ -488,14 +542,14 @@ learning_algorithm = PPO_PIBB(ppo, pibb, curricula)
 if RECOVER_CPG:
     learning_algorithm.read_data_point(cpg_filename, logger, policy, recover_MLP=False)
 
-history_obj = History(rollouts, num_prev_obs, observation_shape=n_observations, device=device)
+history_obj = History(rollouts, num_prev_obs, observation_shape=n_observations, device=device) if ACTIVATE_HISTORY else None
 robot = Runner(policy, learning_algorithm, logger, config_file, env_config, reward_obj, n_out if not CURRICULUM_CPG_RBFN else 12,
                terrain_obj, curricula=curricula, verbose=True, store_observations=True, history_obj=history_obj)
 
 try:
     robot.learn(max_iterations, step_env)
     logged = True
-    logger.log(SAVE_DATA, show_final_graph, plot_file_name=graph_name, save_datapoint=SAVE_DATA)
+    logger.plot_log(SAVE_DATA, show_final_graph, plot_file_name=graph_name, save_datapoint=SAVE_DATA)
 except KeyboardInterrupt:
     if not logged:
-        logger.log(SAVE_DATA, True, plot_file_name=graph_name, save_datapoint=SAVE_DATA)
+        logger.plot_log(SAVE_DATA, True, plot_file_name=graph_name, save_datapoint=SAVE_DATA)

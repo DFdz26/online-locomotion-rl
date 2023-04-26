@@ -88,6 +88,7 @@ class Runner:
             terrains = None if max_difficulty is None else [*range(max_difficulty + 1)]
             self.agents.set_up_recording_video(terrains)
 
+
     def _learning_process_(self, iteration, rewards):
         now_time = time.time()
 
@@ -101,10 +102,13 @@ class Runner:
             noise = noise.detach().clone()
 
         self.logger.store_data(distance, rewards, self.learning_algorithm.get_weights_policy(), noise, iteration,
-                               total_elapsed_time, show_plot=True)
+                               total_elapsed_time, show_plot=False)
         loss = self.learning_algorithm.update(self.policy, rewards)
         self.learning_algorithm.print_info(rewards, iteration, total_elapsed_time, elapsed_time_iteration, loss)
-
+        
+        ppo_info = self.learning_algorithm.get_last_PPO_info_for_logger()
+        self.logger.store_PPO_run_info(ppo_info, iteration)
+        self.logger.plot_learning(iteration)
         # Register the next weights and save
         self.logger.store_data_post(self.learning_algorithm.get_weights_policy())
         self.logger.save_stored_data(actual_weight=self.learning_algorithm.get_weights_policy(), actual_reward=rewards,

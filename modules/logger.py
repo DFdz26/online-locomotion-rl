@@ -64,7 +64,7 @@ class Logger:
     video_settings: VideoSettings
 
     def __init__(self, save=False, frequency=20, frequency_plot=5, robot="", nn_config=None, PIBB_param=None,
-                 test_value=False, size_figure=2, video_frequency=0, video_settings=None):
+                 test_value=False, size_figure=2, video_frequency=0, video_settings=None, show_PPO_graph=False):
 
         if video_frequency != 0 and video_settings is None:
             raise Exception("Set up the settings for recording the video")
@@ -118,12 +118,30 @@ class Logger:
             "mean_distance": False,
         }
 
+        self.soft_reward = []
         self.x_axis = []
         self.mean_distances = []
         self.mean_reward = []
         self.mean_std_height = []
         self.iteration = 0
         self.figure, self.ax = plt.subplots(size_figure)
+
+        self.figure_PPO_param = None
+        self.ax_PPO_param = None
+
+        self.gamma = []
+        self.learning_rates = []
+        self.surrogate_loss = []
+        self.value_loss = []
+        self.entropy = []
+        self.student_loss = []
+        self.terrain_curriculum = []
+        self.loss_mean = []
+        self.time_steps_PPO = []
+        self.show_PPO_graph = not self.test_value and show_PPO_graph
+        
+        if self.show_PPO_graph:
+            self.figure_PPO_param, self.ax_PPO_param = plt.subplots(4, 2)
         plt.ion()
 
         self.distance = []
@@ -156,7 +174,8 @@ class Logger:
                 )
             )
 
-            print(f"Videos will be saved as: {os.path.join(self.folder, setting.filename)}_x.mp4")
+            if self.save_data:
+                print(f"Videos will be saved as: {os.path.join(self.folder, setting.filename)}_x.mp4")
 
     def _start_video_record_(self):
         self.record_in_progress = True
@@ -283,7 +302,9 @@ class Logger:
             self.ax[0].set_xlabel("Iteration")
             self.ax[0].set_ylabel("Reward")
 
-            self.ax[0].plot(xpoints, ypoints)
+            self.ax[0].plot(xpoints, ypoints, 'b', label='instant')
+            self.ax[0].plot(xpoints, np.array([r * 10 for r in self.soft_reward]), 'r', label='mean')
+            self.ax[0].legend()
             ypoints = np.array(self.mean_distances)
 
             self.ax[1].clear()
@@ -292,6 +313,32 @@ class Logger:
             self.ax[1].set_xlabel("Iteration")
             self.ax[1].set_ylabel("Distance (m)")
             self.ax[1].plot(xpoints, ypoints)
+
+    def plot_PPO_progres(self):
+        if not(self.ax_PPO_param is None):
+            def plot_info(info, row, column, x_points, y_label, x_label, title):
+                ypoints = np.array(info)
+                self.ax_PPO_param[row][column].clear()
+    
+                # self.ax_PPO_param[row][column].set_title(title)
+                self.ax_PPO_param[row][column].set_xlabel(x_label)
+                self.ax_PPO_param[row][column].set_ylabel(y_label)
+
+                self.ax_PPO_param[row][column].plot(x_points, ypoints)
+
+            xpoints = np.array(self.time_steps_PPO)
+
+            plot_info(self.learning_rates, 0, 0, xpoints, "Learning rate", "Iteration", "Learning rate vs iteration")
+            plot_info(self.surrogate_loss, 0, 1, xpoints, "Surrogate loss", "Iteration", "Avg. surrogate loss vs iteration")
+            
+            plot_info(self.value_loss, 1, 0, xpoints, "value loss", "Iteration", "Avg. value loss vs iteration")
+            plot_info(self.entropy, 1, 1, xpoints, "Entropy", "Iteration", "Entropy vs iteration")
+
+            plot_info(self.student_loss, 2, 0, xpoints, "Student loss", "Iteration", "Student loss vs iteration")
+            plot_info(self.gamma, 2, 1, xpoints, "gamma", "Iteration", "Gamma vs iteration")
+
+            plot_info(self.terrain_curriculum, 3, 0, xpoints, "Terrain difficulty", "Iteration", "Terrain difficulty vs iteration")
+            plot_info(self.loss_mean, 3, 1, xpoints, "loss_AC", "Iteration", "Loss AC vs iteration")
 
     def __save_datapoints__(self):
         if self.test_value:
@@ -315,25 +362,51 @@ class Logger:
         with open(file_graph_data, "w") as f:
             json.dump(dic, f, indent=2)
 
-    def log(self, save=True, block=True, plot_file_name="", save_datapoint=False):
+    def plot_learning(self, iteration):
+        if (iteration % self.frequency_plot) == 0:
+            self.plot_log(False, False)
+
+    def plot_log(self, save=True, block=True, plot_file_name="", save_datapoint=False):
 
         self.plot_in_grap()
+        self.figure.set_size_inches(18.5, 10.5)
+        ppo_graph_on = self.show_PPO_graph and len(self.time_steps_PPO) != 0
 
-        fig = mpl.pyplot.gcf()
+        if ppo_graph_on:
+            self.plot_PPO_progres()
+            self.figure_PPO_param.set_size_inches(18.5, 10.5)
 
-        fig.set_size_inches(18.5, 10.5)
         if save:
-            plt.savefig(os.path.join(self.folder, plot_file_name + ".png"), dpi=100)
+            self.figure.savefig(os.path.join(self.folder, plot_file_name + ".png"), dpi=100)
+
+            if ppo_graph_on:
+                self.figure_PPO_param.savefig(os.path.join(self.folder, "PPO_param" + ".png"), dpi=100)
 
         if save_datapoint:
             self.__save_datapoints__()
 
         plt.pause(0.001)
+
+        if not ppo_graph_on:
+            plt.figure(self.figure.number)
+        
         plt.show(block=block)
         plt.pause(0.001)
 
+    def store_PPO_run_info(self, PPO_info, iteration):
+        if not(PPO_info is None) and self.show_PPO_graph and (iteration % self.frequency_plot) == 0:
+            self.gamma.append(PPO_info["gamma"])
+            self.learning_rates.append(PPO_info["lr"])
+            self.surrogate_loss.append(PPO_info["surrogate_loss"])
+            self.value_loss.append(PPO_info["value_loss"])
+            self.entropy.append(PPO_info["entropy"])
+            self.student_loss.append(PPO_info["student_loss"])
+            self.terrain_curriculum.append(PPO_info["terrain_curriculum"])
+            self.loss_mean.append(PPO_info["loss_mean"])
+            self.time_steps_PPO.append(PPO_info["time_steps_PPO"])
+
     def store_data(self, distance, reward, weight, noise, iteration, total_time, std_height=None, show_plot=False,
-                   pause=False):
+                   pause=False, PPO_info=None):
 
         mean_reward = float(torch.mean(reward))
         mean_distance = float(torch.mean(distance))
@@ -348,9 +421,12 @@ class Logger:
             self.mean_distances.append(mean_distance)
             self.mean_reward.append(mean_reward)
             self.mean_std_height.append(std_height_mean)
+            self.soft_reward.append(float(np.mean(self.mean_reward[-5:])))
+
+            self.store_PPO_run_info(PPO_info, iteration)
 
             if show_plot:
-                self.log(False, pause)
+                self.plot_log(False, pause)
 
         if self.save_data:
             new_data = {

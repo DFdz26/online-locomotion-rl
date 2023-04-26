@@ -65,7 +65,7 @@ class ActorCritic(nn.Module):
         Normal.set_default_validate_args = False
 
     def get_weights(self):
-        return [self.actor_NN, self.critic_NN, self.expert_NN, self.std]
+        return [self.actor_NN, self.critic_NN, self.expert_NN, self.student_NN, self.std]
 
     def load_weights(self, actor_critic):
         try:
