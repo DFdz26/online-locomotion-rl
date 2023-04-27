@@ -35,6 +35,8 @@ graph_name = "graph_b1_learning"
 
 ACTIVE_RECORDING_CAMERA = True
 ACTIVATE_HEIGHT_READ = True
+ACTIVATE_CPG_LATENT_HEAD = True
+ACTIVATE_PHI_AMPLITUDE_HEAD = True
 frequency_recording = 50
 frequency_logger = 50
 frequency_plot = 5
@@ -473,7 +475,10 @@ n_out = cpg_rbf_nn.get_n_outputs()
 print(f"n_out: {n_out}")
 
 latent_space_size = 12
+latent_heads_size = 32
 priv_obs = 21
+head_cpg_latent = None
+head_phi_amplitude = None
 
 if ACTIVATE_HEIGHT_READ:
     priv_obs += 52
@@ -501,8 +506,25 @@ expertArgs.inputs = [priv_obs]
 if ACTIVATE_HEIGHT_READ:
     expertArgs.hidden_dim = [128, 64]
 else:
-    expertArgs.hidden_dim = [32]
-expertArgs.outputs = [latent_space_size]
+    expertArgs.hidden_dim = [64]
+
+if ACTIVATE_CPG_LATENT_HEAD or ACTIVATE_PHI_AMPLITUDE_HEAD:
+    expertArgs.outputs = [latent_heads_size]
+
+    if ACTIVATE_CPG_LATENT_HEAD:
+        head_cpg_latent = NNCreatorArgs()
+        head_cpg_latent.inputs = [latent_heads_size + 12]
+        head_cpg_latent.hidden_dim = [32]
+        head_cpg_latent.outputs = [latent_space_size]
+
+    if ACTIVATE_PHI_AMPLITUDE_HEAD:
+        head_phi_amplitude = NNCreatorArgs()
+        head_phi_amplitude.inputs = [latent_heads_size]
+        head_phi_amplitude.hidden_dim = [32]
+        head_phi_amplitude.outputs = [1]
+else:
+    expertArgs.outputs = [latent_space_size]
+
 
 studentArgs = NNCreatorArgs()
 studentArgs.inputs = [num_prev_obs * n_observations]

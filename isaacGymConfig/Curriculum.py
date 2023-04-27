@@ -521,15 +521,20 @@ class AlgorithmCurriculum:
 
     def get_curriculum_action(self, PPO, PIBB, observations, expert_obs, previous_obs):
         actions = None
+        actions_CPG = None
+        amplitude = 1.
+
+        if self.PPO_activated:
+            encoder_info, amplitude = PPO.get_encoder_info()
 
         if self.PIBB_activated:
-            actions_CPG = PIBB.act(observations, expert_obs) * 1.
-            rbfn, rbfn_delayed = PIBB.get_rbf_activations()
+            actions_CPG = PIBB.act(observations, expert_obs) * amplitude
+            # rbfn, rbfn_delayed = PIBB.get_rbf_activations()
 
             actions = actions_CPG
 
         if self.PPO_activated:
-            actions_PPO = PPO.act(observations, expert_obs, previous_obs, actions_mult=1.)
+            actions_PPO = PPO.act(observations, expert_obs, previous_obs, actions_CPG, actions_mult=1.)
 
             # Scale the output to be [-2, 2]
             # for i in range(len(actions_PPO)):

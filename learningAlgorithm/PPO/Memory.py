@@ -15,6 +15,8 @@ class Memory:
             self.action_mean = None
             self.action_sigma = None
             self.past_observations = None
+            self.primitive_movement = None
+            self.rbf_activations = None
 
             self.dones = None
 
@@ -22,15 +24,17 @@ class Memory:
             self.__init__()
 
     def __init__(self, num_envs, num_step_per_env, actions_shape, observation_shape, expert_observation_shape,
-                 past_observation_shape, device='cpu'):
+                 past_observation_shape, device='cpu', rbf_nodes=None, store_primitive_movement=False, store_rbfn=False):
         self.num_step_per_env = num_step_per_env
         self.num_envs = num_envs
+        self.store_rbfn = store_rbfn
 
         self.step = 0
 
         self.device = device
         self.actions_shape = actions_shape
         self.past_observation_shape = past_observation_shape
+        self.store_primitive_movement = store_primitive_movement
 
         # Simulation memory
         self.observations = torch.zeros(num_step_per_env, num_envs, observation_shape, device=self.device,
@@ -42,6 +46,14 @@ class Memory:
         self.rewards = torch.zeros(num_step_per_env, num_envs, 1, device=self.device, requires_grad=False)
         self.actions = torch.zeros(num_step_per_env, num_envs, actions_shape, device=self.device, requires_grad=False)
         self.dones = torch.zeros(num_step_per_env, num_envs, 1, device=self.device, requires_grad=False).byte()
+
+        if self.store_primitive_movement:
+            self.primitive_movement = torch.zeros(num_step_per_env, num_envs, actions_shape, device=self.device,
+                                                  requires_grad=False)
+
+        if self.store_rbfn:
+            self.rbf_activations = torch.zeros(num_step_per_env, num_envs, rbf_nodes, device=self.device,
+                                               requires_grad=False)
 
         # Actor critic memory
         self.actions_log_prob = torch.zeros(num_step_per_env, num_envs, 1, device=self.device, requires_grad=False)
@@ -61,11 +73,18 @@ class Memory:
             self.past_observations[self.step].copy_(step.past_observations)
         self.dones[self.step].copy_(step.dones.view(-1, 1))
         self.actions[self.step].copy_(step.actions)
+
+        if self.store_primitive_movement:
+            self.primitive_movement[self.step].copy_(step.primitive_movement)
+
         self.rewards[self.step].copy_(step.rewards.view(-1, 1))
         self.values[self.step].copy_(step.values)
         self.actions_log_prob[self.step].copy_(step.actions_log_prob.view(-1, 1))
         self.mu[self.step].copy_(step.action_mean)
         self.sigma[self.step].copy_(step.action_sigma)
+
+        if self.store_rbfn:
+            self.rbf_activations[self.step].copy_(step.rbf_activations)
         self.step += 1
 
     def clear(self):
@@ -100,6 +119,8 @@ class Memory:
         obs_history = self.past_observations.flatten(0, 1)
         critic_observations = observations
 
+        primitive_movement = self.primitive_movement.flatten(0, 1) if self.store_primitive_movement else None
+        rbf_activations = self.rbf_activations.flatten(0, 1) if self.store_rbfn else None
         actions = self.actions.flatten(0, 1)
         values = self.values.flatten(0, 1)
         returns = self.returns.flatten(0, 1)
@@ -114,6 +135,9 @@ class Memory:
                 end = (i + 1) * mini_batch_size
                 batch_idx = indices[start:end]
 
+                primitive_movement_batch = primitive_movement[batch_idx] if self.store_primitive_movement else None
+                rbfn_activations_batch = rbf_activations[batch_idx] if self.store_rbfn else None
+
                 obs_batch = observations[batch_idx]
                 obs_history_batch = obs_history[batch_idx]
                 expert_obs = expert_observations[batch_idx]
@@ -126,4 +150,5 @@ class Memory:
                 old_mu_batch = old_mu[batch_idx]
                 old_sigma_batch = old_sigma[batch_idx]
                 yield obs_batch, expert_obs, critic_observations_batch, actions_batch, target_values_batch, advantages_batch, \
-                    returns_batch, old_actions_log_prob_batch, old_mu_batch, old_sigma_batch, obs_history_batch
+                    returns_batch, old_actions_log_prob_batch, old_mu_batch, old_sigma_batch, obs_history_batch, \
+                    primitive_movement_batch, rbfn_activations_batch

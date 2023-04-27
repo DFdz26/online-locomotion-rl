@@ -301,30 +301,6 @@ class CPGRBFN(torchNet):
 
         self.__resize_rbfn_to_n_motor(motor1, motor2)
 
-        # self.outputs = motor1
-
-        # for i in range(int(self.__n_out/6)):
-        # 	# normal = motor1 if i % 2 == 0 else motor2
-        # 	# delayed = motor2 if i % 2 == 0 else motor1
-        # 	normal = motor1
-        # 	delayed = motor2
-
-        # 	self.outputs[0][0 + 6*i] = normal[0][0]
-        # 	self.outputs[0][1 + 6*i] = delayed[0][1]
-        # 	self.outputs[0][2 + 6*i] = normal[0][2]
-
-        # 	self.outputs[0][3 + 6*i] = delayed[0][0]
-        # 	self.outputs[0][3 + 6*i] = normal[0][1]
-        # 	self.outputs[0][5 + 6*i] = delayed[0][2]
-
-        # 	# self.outputs[0][0 + 6*i] = motor1[0][6*i]
-        # 	# self.outputs[0][1 + 6*i] = motor2[0][1 + 6*i]
-        # 	# self.outputs[0][2 + 6*i] = motor1[0][2 + 6*i]
-
-        # 	# self.outputs[0][3 + 6*i] = motor2[0][6*i]
-        # 	# self.outputs[0][3 + 6*i] = motor1[0][1 + 6*i]
-        # 	# self.outputs[0][5 + 6*i] = motor2[0][2 + 6*i]
-
         return self.outputs
     
     def get_last_rbfn_activations(self):

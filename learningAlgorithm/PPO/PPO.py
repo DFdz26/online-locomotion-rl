@@ -60,6 +60,8 @@ class PPOArgs:
     num_past_actions = 15
     student_module_subsampling = 1
 
+    coef_differences_CPG = None
+
 
 class PPO:
 
@@ -121,12 +123,15 @@ class PPO:
     def change_coef_value(self, new):
         self.cfg.value_loss_coef = new
 
-    def act(self, observation, observation_expert, history, actions_mult=1.):
+    def get_encoder_info(self, observation_expert):
+        return self.actor_critic.act_expert_encoder(observation_expert)
+
+    def act(self, observation, observation_expert, history, cpg_activations, actions_mult=1.):
         if self.test:
             return self.actor_critic.act_test(observation, observation_expert) if self.expert else \
-                self.actor_critic.act_student(observation, history)
+                self.actor_critic.act_student(observation, history, cpg_activations)
         else:
-            self.step_simulation.actions = self.actor_critic.act(observation, observation_expert).detach()
+            self.step_simulation.actions = self.actor_critic.act(observation, observation_expert, cpg_activations).detach()
             self.step_simulation.values = self.actor_critic.evaluate(observation, observation_expert).detach()
             self.step_simulation.actions_log_prob = self.actor_critic.get_actions_log_prob(
                 self.step_simulation.actions).detach()
@@ -137,6 +142,7 @@ class PPO:
             self.step_simulation.past_observations = history
             self.step_simulation.observation_expert = observation_expert
             self.step_simulation.critic_observations = observation
+            self.step_simulation.primitive_movement = cpg_activations.detach()
 
             # if actions_mult != 1.0:
             #     self.step_simulation.actions *= actions_mult
@@ -204,13 +210,14 @@ class PPO:
         kl_mean_tot = 0
         lr_mean_tot = 0
         mean_loss = 0
+        mean_difference_cpg = 0
 
         for obs_batch, expert_obs, critic_obs_batch, actions_batch, target_values_batch, advantages_batch, \
                 returns_batch, old_actions_log_prob_batch, old_mu_batch, \
-                old_sigma_batch, past_obs_batch in self.memory.mini_batch_generator(self.cfg.num_mini_batches,
+                old_sigma_batch, past_obs_batch, primitive_movement_batch, rbf_batch in self.memory.mini_batch_generator(self.cfg.num_mini_batches,
                                                                                     self.cfg.num_learning_epochs):
-
-            self.actor_critic.act(obs_batch, expert_obs)
+            self.actor_critic.act_expert_encoder(expert_obs)
+            self.actor_critic.act(obs_batch, expert_obs, primitive_movement_batch)
             actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
             value_batch = self.actor_critic.evaluate(critic_obs_batch, expert_obs)
             mu_batch = self.actor_critic.action_mean
@@ -265,7 +272,15 @@ class PPO:
                 value_loss = (returns_batch - value_batch).pow(2).mean()
 
             loss = surrogate_loss + self.cfg.value_loss_coef * value_loss - self.cfg.entropy_coef * entropy_batch.mean()
-            # loss = -loss
+
+            difference_cpg_loss = 0.
+
+            if not (self.cfg.coef_differences_CPG is None or primitive_movement_batch is None):
+                difference_cpg_loss = F.mse_loss(primitive_movement_batch, actions_batch) * self.cfg.coef_differences_CPG
+
+            mean_difference_cpg += float(difference_cpg_loss)
+            loss += difference_cpg_loss
+
             mean_loss += float(loss)
 
             # Gradient step
@@ -299,6 +314,7 @@ class PPO:
         mean_student_loss /= (num_updates * self.cfg.student_module_subsampling)
         kl_mean_tot /= num_updates
         lr_mean_tot /= num_updates
+        mean_difference_cpg /= num_updates
         self.memory.clear()
 
         if self.cfg.multiplyier < 1.0:
@@ -312,7 +328,8 @@ class PPO:
                 "lr": lr_mean_tot,
                 "mean_loss": mean_loss,
                 "kl_mean": kl_mean_tot,
-                "student_loss": mean_student_loss}
+                "student_loss": mean_student_loss,
+                "mean_difference_cpg": mean_difference_cpg}
 
     @staticmethod
     def get_noise():

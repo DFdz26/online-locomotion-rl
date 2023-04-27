@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from torch.distributions import Normal
 
-accepted_kwargs = ["debug_mess", "test", "scale_max", "scale_min"]
+accepted_kwargs = ["debug_mess", "test", "scale_max", "scale_min", "head_encoder_cpg_actions", "head_cpg_phi_amplitude"]
 
 
 class NNCreatorArgs:
@@ -30,6 +30,13 @@ class ActorCritic(nn.Module):
         self.actor_std_noise = actor_std_noise
         self.scale_output = False
 
+        self.head_cpg_actions_encoder_activated = False
+        self.head_encoder_cpg_actions = None
+
+        self.head_cpg_phi_amplitude = None
+        self.head_phi_cpg_activated = False
+        self.output_encoder = None
+
         if kwargs:
             self.__prepare_kwargs__(kwargs)
 
@@ -44,6 +51,12 @@ class ActorCritic(nn.Module):
                 print(f"Critic MLP: {self.critic_NN}")
                 print(f"Expert MLP: {self.expert_NN}")
                 print(f"Student MLP: {self.student_NN}")
+
+                if not(self.head_cpg_actions_encoder_activated is None):
+                    print(f"Head encoder-cpg_actionsn: {self.head_encoder_cpg_actions}")
+
+                if self.head_phi_cpg_activated:
+                    print(f"Head phi-cpg: {self.head_cpg_phi_amplitude}")
 
             # Action noise
             self.std = nn.Parameter(actor_std_noise * torch.ones(actorArgs.outputs[0]))
@@ -65,19 +78,37 @@ class ActorCritic(nn.Module):
         Normal.set_default_validate_args = False
 
     def get_weights(self):
-        return [self.actor_NN, self.critic_NN, self.expert_NN, self.student_NN, self.std]
+        return [self.actor_NN, self.critic_NN, self.expert_NN, self.student_NN, self.std,
+                self.head_encoder_cpg_actions, self.head_cpg_phi_amplitude]
 
     def load_weights(self, actor_critic):
-        try:
+        if len(actor_critic) == 5:
             self.actor_NN, self.critic_NN, self.expert_NN, self.student_NN, self.std = actor_critic
-        except Exception as e:
-            self.actor_NN, self.critic_NN, self.expert_NN, self.std = actor_critic
+        elif len(actor_critic) == 4:
+            self.actor_NN, self.actor_NN, self.expert_NN, self.std = actor_critic
+        elif len(actor_critic) == 6:
+            self.actor_NN, self.critic_NN, self.expert_NN, self.student_NN, \
+                self.std, self.head_encoder_cpg_actions, self.head_cpg_phi_amplitude = actor_critic
+
+            if not(self.head_cpg_phi_amplitude is None):
+                self.head_phi_cpg_activated = True
+
+            if not(self.head_encoder_cpg_actions is None):
+                self.head_cpg_actions_encoder_activated = True
+        else:
+            raise Exception("Error loading weights in ActorCritic: Number of weights not known.")
 
         if self.debug_mess:
             print(f"Actor MLP: {self.actor_NN}")
             print(f"Critic MLP: {self.critic_NN}")
             print(f"Expert MLP: {self.expert_NN}")
             print(f"Student MLP: {self.student_NN}")
+
+            if self.head_cpg_actions_encoder_activated:
+                print(f"Head encoder-cpg_actionsn: {self.head_encoder_cpg_actions}")
+
+            if self.head_phi_cpg_activated:
+                print(f"Head phi-cpg: {self.head_cpg_phi_amplitude}")
 
     def forward(self):
         pass
@@ -100,25 +131,48 @@ class ActorCritic(nn.Module):
     def _scale_output(self, selected_action):
         return self.range_scaled * selected_action + self.min_range
 
-    def update_distribution(self, observations, expert_observations):
-        latent_space = self.expert_NN(expert_observations)
+    def act_expert_encoder(self, expert_observations):
+        output_head_cpg_phi = 1.
+        self.output_encoder = self.expert_NN(expert_observations)
+
+        if self.head_phi_cpg_activated:
+            output_head_cpg_phi = self.head_cpg_phi_amplitude(self.output_encoder)
+
+        return self.output_encoder, output_head_cpg_phi
+
+    def act_student_encoder(self, student_observations):
+        output_head_cpg_phi = None
+        self.output_encoder = self.student_NN(student_observations)
+
+        if self.head_phi_cpg_activated:
+            output_head_cpg_phi = self.head_cpg_phi_amplitude(self.output_encoder)
+
+        return self.output_encoder, output_head_cpg_phi
+
+    def __act__(self, observations, encoder_info, cpg_actions):
+        latent_space = self.output_encoder
+
+        if self.head_cpg_actions_encoder_activated:
+            latent_space = self.head_encoder_cpg_actions(torch.cat((latent_space, cpg_actions), dim=-1))
+
         selected_action = self.actor_NN(torch.cat((observations, latent_space), dim=-1))
 
         if self.scale_output:
             selected_action = self._scale_output(selected_action)
+
+        return selected_action
+
+    def update_distribution(self, observations, expert_observations, cpg_actions):
+        selected_action = self.__act__(observations, expert_observations, cpg_actions)
 
         self.distribution = Normal(selected_action, self.std)
 
-    def act(self, observations, expert_observations):
-        self.update_distribution(observations, expert_observations)
+    def act(self, observations, expert_observations, cpg_actions):
+        self.update_distribution(observations, expert_observations, cpg_actions)
         return self.distribution.sample()
 
-    def act_student(self, observations, history):
-        latent_space = self.student_NN(history)
-        selected_action = self.actor_NN(torch.cat((observations, latent_space), dim=-1))
-
-        if self.scale_output:
-            selected_action = self._scale_output(selected_action)
+    def act_student(self, observations, history, cpg_actions):
+        selected_action = self.__act__(observations, history, cpg_actions)
 
         return selected_action
 
@@ -159,6 +213,42 @@ class ActorCritic(nn.Module):
             self.range_scaled = accepted["scale_max"] - accepted["scale_min"]
             self.min_range = accepted["scale_min"]
 
+        if "head_encoder_cpg_actions" in accepted and accepted["head_encoder_cpg_actions"] is not None:
+            self.head_encoder_cpg_actions_activated = True
+            self.__head_encoder_cpg_actions_building__(accepted["head_encoder_cpg_actions"])
+
+        if "head_cpg_phi_amplitude" in accepted and accepted["head_cpg_phi_amplitude"] is not None:
+            self.head_phi_cpg_activated = True
+            self.__head_cpg_phi_amplitude_building__(accepted["head_cpg_phi_amplitude"])
+
+    def __head_cpg_phi_amplitude_building__(self, args):
+        if self.debug_mess:
+            print("Starting to build the Head CPG phi amplitude")
+
+        layers = self.__generic_MLP_building__(args)
+
+        if self.debug_mess:
+            print("Creating the Head CPG phi amplitude ...", end='  ')
+
+        self.head_cpg_phi_amplitude = nn.Sequential(*layers)
+
+        if self.debug_mess:
+            print("Done")
+
+    def __head_encoder_cpg_actions_building__(self, args):
+        if self.debug_mess:
+            print("Starting to build the Head cpg_actions encoder")
+
+        layers = self.__generic_MLP_building__(args)
+
+        if self.debug_mess:
+            print("Creating the Head cpg_actions encoder ...", end='  ')
+
+        self.head_encoder_cpg_actions = nn.Sequential(*layers)
+
+        if self.debug_mess:
+            print("Done")
+
     def __student_building__(self, studentArgs):
         if self.debug_mess:
             print("Starting to build the Student")
@@ -177,7 +267,8 @@ class ActorCritic(nn.Module):
         if self.debug_mess:
             print("Starting to build the Expert")
 
-        layers = self.__generic_MLP_building__(expertArgs)
+        layers = self.__generic_MLP_building__(expertArgs, scale_output=self.head_cpg_actions_encoder_activated or
+                                                                        self.head_phi_cpg_activated)
 
         if self.debug_mess:
             print("Creating the Expert ...", end='  ')

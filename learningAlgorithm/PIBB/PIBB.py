@@ -148,5 +148,5 @@ class PIBB(object):
     def last_step(self, obs, exp_obs):
         pass
 
-    def act(self, obs, obs_exp):
-        return self.policy.forward(obs)
+    def act(self, obs, obs_exp, cpg_amplitude=1.):
+        return self.policy.forward(obs, cpg_amplitude=cpg_amplitude)
