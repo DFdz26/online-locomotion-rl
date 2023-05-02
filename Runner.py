@@ -132,6 +132,10 @@ class Runner:
         for i in range(iterations):
             self.starting_iteration_time = time.time()
 
+            if i == 300:
+                self.agents.get_record_robot()
+                
+
             for step in range(steps_per_iteration):
 
                 actions = self.learning_algorithm.act(self.obs, self.obs_exp, self.prev_obs)
@@ -151,6 +155,9 @@ class Runner:
 
             if closed_simulation:
                 break
+
+            if i == 300:
+                self.agents.stop_record_robot()
 
             self._stop_recording()
             final_reward = self.agents.compute_final_reward()

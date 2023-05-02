@@ -52,7 +52,7 @@ class ActorCritic(nn.Module):
                 print(f"Expert MLP: {self.expert_NN}")
                 print(f"Student MLP: {self.student_NN}")
 
-                if not(self.head_cpg_actions_encoder_activated is None):
+                if self.head_cpg_actions_encoder_activated:
                     print(f"Head encoder-cpg_actionsn: {self.head_encoder_cpg_actions}")
 
                 if self.head_phi_cpg_activated:
@@ -137,6 +137,7 @@ class ActorCritic(nn.Module):
 
         if self.head_phi_cpg_activated:
             output_head_cpg_phi = self.head_cpg_phi_amplitude(self.output_encoder)
+            output_head_cpg_phi * 2 -1
 
         return self.output_encoder, output_head_cpg_phi
 
@@ -146,6 +147,7 @@ class ActorCritic(nn.Module):
 
         if self.head_phi_cpg_activated:
             output_head_cpg_phi = self.head_cpg_phi_amplitude(self.output_encoder)
+            output_head_cpg_phi * 2 -1
 
         return self.output_encoder, output_head_cpg_phi
 
@@ -184,8 +186,12 @@ class ActorCritic(nn.Module):
     def get_actions_log_prob(self, actions):
         return self.distribution.log_prob(actions).sum(dim=-1)
 
-    def evaluate(self, critic_observations, exp_obs):
+    def evaluate(self, critic_observations, exp_obs, cpg_actions):
         latent_space = self.expert_NN(exp_obs)
+
+        if self.head_cpg_actions_encoder_activated:
+            latent_space = self.head_encoder_cpg_actions(torch.cat((latent_space, cpg_actions), dim=-1))
+
         return self.critic_NN(torch.cat((critic_observations, latent_space), dim=-1))
 
     def __default_values_kwargs__(self):
@@ -218,14 +224,15 @@ class ActorCritic(nn.Module):
             self.__head_encoder_cpg_actions_building__(accepted["head_encoder_cpg_actions"])
 
         if "head_cpg_phi_amplitude" in accepted and accepted["head_cpg_phi_amplitude"] is not None:
-            self.head_phi_cpg_activated = True
             self.__head_cpg_phi_amplitude_building__(accepted["head_cpg_phi_amplitude"])
 
     def __head_cpg_phi_amplitude_building__(self, args):
         if self.debug_mess:
             print("Starting to build the Head CPG phi amplitude")
 
-        layers = self.__generic_MLP_building__(args)
+        self.head_phi_cpg_activated = True
+
+        layers = self.__generic_MLP_building__(args, scale_output=True)
 
         if self.debug_mess:
             print("Creating the Head CPG phi amplitude ...", end='  ')
@@ -238,6 +245,8 @@ class ActorCritic(nn.Module):
     def __head_encoder_cpg_actions_building__(self, args):
         if self.debug_mess:
             print("Starting to build the Head cpg_actions encoder")
+
+        self.head_cpg_actions_encoder_activated = True
 
         layers = self.__generic_MLP_building__(args)
 

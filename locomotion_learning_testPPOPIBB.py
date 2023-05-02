@@ -36,10 +36,10 @@ graph_name = "graph_b1_learning"
 ACTIVE_RECORDING_CAMERA = True
 ACTIVATE_HEIGHT_READ = True
 ACTIVATE_CPG_LATENT_HEAD = True
-ACTIVATE_PHI_AMPLITUDE_HEAD = True
+ACTIVATE_PHI_AMPLITUDE_HEAD = False
 frequency_recording = 50
 frequency_logger = 50
-frequency_plot = 5
+frequency_plot = 2
 
 CURRICULUM_CPG_RBFN = True
 RENDER_GUI = False
@@ -53,7 +53,7 @@ rollouts = 1250
 iterations_without_control = 1
 num_env_colums = 100
 # learning_rate_PPO = 0.0000003  # 0.0000003
-start_PPO_acting_iteration = 350
+start_PPO_acting_iteration = 150
 num_mini_batches = 2100
 num_prev_obs = 15
 device = "cuda:0"
@@ -104,8 +104,8 @@ def config_learning_curriculum():
 
     if CURRICULUM_CPG_RBFN and not RECOVER_CPG:
         algCfg.PIBBCfg.switching_indirect_to_direct = True
-        algCfg.PIBBCfg.threshold_switching = 100
-        algCfg.PIBBCfg.decay_at_switching = 0.992
+        algCfg.PIBBCfg.threshold_switching = 50
+        algCfg.PIBBCfg.decay_at_switching = 0.995
         algCfg.PIBBCfg.variance_at_switching = 0.009
         algCfg.PIBBCfg.boost_first_switching_noise = 1.
         algCfg.PIBBCfg.change_RW_scales_when_switching = True
@@ -291,7 +291,7 @@ reward_list = {
     # },
 
     "high_penalization_contacts": {
-        "weight": -0.25 * 1.5,
+        "weight": -0.25 * 1.5 * 1.15,
         "reward_data": {
             "absolute_distance": True,
             "max_clip": 2.5,
@@ -303,7 +303,7 @@ reward_list = {
     },
 
     "height_error": {
-        "weight": -2.9 * 1.2,
+        "weight": -2.9 * 1.2 * 6,
         "reward_data": {
             "max_clip": 2.5,
         }
@@ -324,7 +324,7 @@ reward_list = {
     },
 
     "z_vel": {
-        "weight": 0.1 * 10.,
+        "weight": 0.1 * 10. * 3.5, 
         "reward_data": {
             "exponential": False,
             "weight": -0.24
@@ -332,7 +332,7 @@ reward_list = {
     },
 
     "roll_pitch": {
-        "weight": 0.077 * 1,
+        "weight": 0.077 * 1.2,
         "reward_data": {
             "exponential": False,
             "weight": -0.15
@@ -340,7 +340,7 @@ reward_list = {
     },
 
     "yaw_vel": {
-        "weight": 0.028,
+        "weight": 0.028 * 1.1,
         "reward_data": {
             "exponential": False,
             "weight": -0.1,
@@ -349,7 +349,7 @@ reward_list = {
     },
 
     "y_velocity": {
-        "weight": 0.1 * 1.4,
+        "weight": 0.1 * 1.6,
         "reward_data": {
             "exponential": False,
             "weight": -0.075  # 0.05
@@ -357,7 +357,7 @@ reward_list = {
     },
 
     "x_velocity": {
-        "weight": 1. * 2 * 1.5, # 1.12
+        "weight": 1. * 2 * 1.8 * 3.5, # 1.12
         "reward_data": {
             "exponential": False,
             "weight": 0.178  # 0.177
@@ -411,9 +411,9 @@ if RECOVER_CPG:
     variance = 0.003
     noise_boost = 0.9
 elif CURRICULUM_CPG_RBFN:
-    decay = 0.992
-    variance = 0.022
-    noise_boost = 1.75
+    decay = 0.997
+    variance = 0.027
+    noise_boost = 1.5
 else:
     variance = 0.027
     decay = 0.9965
@@ -483,7 +483,8 @@ head_phi_amplitude = None
 if ACTIVATE_HEIGHT_READ:
     priv_obs += 52
 
-n_observations = 45
+# n_observations = 45
+n_observations = 39
 actor_input = n_observations + latent_space_size
 
 actorArgs = NNCreatorArgs()
@@ -491,7 +492,7 @@ actorArgs = NNCreatorArgs()
 actorArgs.inputs = [actor_input]
 # actorArgs.hidden_dim = [128, 64]
 # actorArgs.hidden_dim = [256, 128]
-actorArgs.hidden_dim = [128, 64]
+actorArgs.hidden_dim = [128]
 actorArgs.outputs = [n_out if not CURRICULUM_CPG_RBFN else 12]
 
 criticArgs = NNCreatorArgs()
@@ -522,25 +523,28 @@ if ACTIVATE_CPG_LATENT_HEAD or ACTIVATE_PHI_AMPLITUDE_HEAD:
         head_phi_amplitude.inputs = [latent_heads_size]
         head_phi_amplitude.hidden_dim = [32]
         head_phi_amplitude.outputs = [1]
+
+    space_student = latent_heads_size
 else:
     expertArgs.outputs = [latent_space_size]
+    space_student = latent_space_size
 
 
 studentArgs = NNCreatorArgs()
 studentArgs.inputs = [num_prev_obs * n_observations]
 # criticArgs.hidden_dim = [128, 64]
 studentArgs.hidden_dim = [128, 64]
-studentArgs.outputs = [latent_space_size]
+studentArgs.outputs = [space_student]
 
 actor_std_noise = 1.
 
 actorCritic = ActorCritic(actorArgs, criticArgs, actor_std_noise, expertArgs, studentArgs, debug_mess=True,
-                          scale_max=2, scale_min=-2)
+                          scale_max=2, scale_min=-2, head_encoder_cpg_actions=head_cpg_latent, head_cpg_phi_amplitude=head_phi_amplitude)
 
 ppo_cfg = PPOArgs()
 ppo_cfg.num_past_actions = num_prev_obs
 ppo_cfg.num_mini_batches = num_mini_batches
-ppo = PPO(actorCritic, device=device, verbose=True, cfg=ppo_cfg)
+ppo = PPO(actorCritic, device=device, verbose=True, cfg=ppo_cfg, store_primitive_movement=ACTIVATE_CPG_LATENT_HEAD)
 
 reward_obj = Rewards(rollouts, device, reward_list, 0.999999, step_env, discrete_rewards=True)
 pibb = PIBB(rollouts, h, 1, n_kernels * n_out, decay, variance, device="cuda:0", boost_noise=noise_boost)

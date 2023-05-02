@@ -357,6 +357,25 @@ class Logger:
 
             filename = "learning_graph_data.json"
 
+            if self.show_PPO_graph:
+                ppo_graph_data = {
+                    "gamma": self.gamma,
+                    "learning_rates": self.learning_rates,
+                    "surrogate_loss": self.surrogate_loss,
+                    "value_loss": self.value_loss,
+                    "entropy": self.entropy,
+                    "student_loss": self.student_loss,
+                    "terrain_curriculum": self.terrain_curriculum,
+                    "loss_mean": self.loss_mean,
+                    "time_steps_PPO": self.time_steps_PPO,
+                }
+
+                filename_ppo = "learning_graph_data_ppo.json"
+                filename_ppo = os.path.join(self.folder, filename_ppo)
+
+                with open(filename_ppo, "w") as f:
+                    json.dump(ppo_graph_data, f, indent=2)
+
         file_graph_data = os.path.join(self.folder, filename)
 
         with open(file_graph_data, "w") as f:

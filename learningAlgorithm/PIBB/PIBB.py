@@ -19,6 +19,9 @@ class PIBB(object):
         self.s_norm = torch.ones(_rollouts, dtype=torch.float32, device=self.device, requires_grad=False)
         self.cost_weighted_noise = None
         self.noise_arr = None
+        self.output_policy = None
+        self.previous_noise = None
+        self.previous_reward = None
 
         self.create_noise_cost_weighted_noise(_noise_len, boost_noise=boost_noise)
 
@@ -145,8 +148,12 @@ class PIBB(object):
     def post_step_simulation(obs, exp_obs, actions, reward, dones, info, closed_simulation):
         pass
 
-    def last_step(self, obs, exp_obs):
-        pass
+    def last_step(self, obs, exp_obs, reset=True):
+        if reset:
+            self.policy.reset()
+        return self.output_policy
 
-    def act(self, obs, obs_exp, cpg_amplitude=1.):
-        return self.policy.forward(obs, cpg_amplitude=cpg_amplitude)
+    def act(self, obs, obs_exp):
+        self.output_policy = self.policy.forward(obs)
+
+        return self.output_policy

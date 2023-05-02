@@ -60,18 +60,21 @@ class PPOArgs:
     num_past_actions = 15
     student_module_subsampling = 1
 
-    coef_differences_CPG = None
+    # coef_differences_CPG = None
+    # coef_differences_CPG = 10
+    coef_differences_CPG = 8
 
 
 class PPO:
 
-    def __init__(self, actor_critic: ActorCritic, device='cpu', verbose=False, loading=False, cfg=PPOArgs()):
+    def __init__(self, actor_critic: ActorCritic, device='cpu', verbose=False, loading=False, cfg=PPOArgs(), store_primitive_movement=False):
 
         self.device = device
         self.verbose = verbose
         self.cfg = cfg
         self.test = False
         self.expert = False
+        self.store_primitive_movement = store_primitive_movement
 
         # PPO components
         self.actor_critic = actor_critic
@@ -107,7 +110,8 @@ class PPO:
     def init_memory(self, num_envs, num_step_simulations_per_env, actor_obs_shape, expert_obs, action_shape,
                     n_past_observation):
         self.memory = Memory(num_envs, num_step_simulations_per_env, action_shape,
-                             actor_obs_shape, expert_obs, n_past_observation * actor_obs_shape, self.device)
+                             actor_obs_shape, expert_obs, n_past_observation * actor_obs_shape, self.device,
+                             store_primitive_movement=self.store_primitive_movement)
 
     def test_mode(self):
         self.test = True
@@ -132,7 +136,7 @@ class PPO:
                 self.actor_critic.act_student(observation, history, cpg_activations)
         else:
             self.step_simulation.actions = self.actor_critic.act(observation, observation_expert, cpg_activations).detach()
-            self.step_simulation.values = self.actor_critic.evaluate(observation, observation_expert).detach()
+            self.step_simulation.values = self.actor_critic.evaluate(observation, observation_expert, cpg_activations).detach()
             self.step_simulation.actions_log_prob = self.actor_critic.get_actions_log_prob(
                 self.step_simulation.actions).detach()
             self.step_simulation.action_mean = self.actor_critic.action_mean.detach()
@@ -185,8 +189,8 @@ class PPO:
 
         self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=self.cfg.learning_rate)
 
-    def last_step(self, last_critic_obs, exp_obs):
-        last_values = self.actor_critic.evaluate(last_critic_obs, exp_obs).detach()
+    def last_step(self, last_critic_obs, exp_obs, primitive_movement_batch):
+        last_values = self.actor_critic.evaluate(last_critic_obs, exp_obs, primitive_movement_batch).detach()
         self.memory.compute_returns(last_values, self.cfg.gamma, self.cfg.lam)
 
     @staticmethod
@@ -217,9 +221,9 @@ class PPO:
                 old_sigma_batch, past_obs_batch, primitive_movement_batch, rbf_batch in self.memory.mini_batch_generator(self.cfg.num_mini_batches,
                                                                                     self.cfg.num_learning_epochs):
             self.actor_critic.act_expert_encoder(expert_obs)
-            self.actor_critic.act(obs_batch, expert_obs, primitive_movement_batch)
+            new_actions = self.actor_critic.act(obs_batch, expert_obs, primitive_movement_batch)
             actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
-            value_batch = self.actor_critic.evaluate(critic_obs_batch, expert_obs)
+            value_batch = self.actor_critic.evaluate(critic_obs_batch, expert_obs, primitive_movement_batch)
             mu_batch = self.actor_critic.action_mean
             sigma_batch = self.actor_critic.action_std
             entropy_batch = self.actor_critic.entropy
@@ -276,15 +280,18 @@ class PPO:
             difference_cpg_loss = 0.
 
             if not (self.cfg.coef_differences_CPG is None or primitive_movement_batch is None):
-                difference_cpg_loss = F.mse_loss(primitive_movement_batch, actions_batch) * self.cfg.coef_differences_CPG
+                # difference_cpg_loss = F.mse_loss(primitive_movement_batch, actions_batch) * self.cfg.coef_differences_CPG
+                difference_cpg_loss = F.mse_loss(primitive_movement_batch, new_actions) * self.cfg.coef_differences_CPG
 
             mean_difference_cpg += float(difference_cpg_loss)
             loss += difference_cpg_loss
+            # loss_clone = loss.clone()
 
             mean_loss += float(loss)
 
             # Gradient step
             self.optimizer.zero_grad()
+            # loss_clone.backward(retain_graph=True)
             loss.backward()
             nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
             self.optimizer.step()

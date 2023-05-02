@@ -17,7 +17,7 @@ from .Rewards import foot_contact_indices_keyword, joint_velocity_keyword, foot_
 from .Rewards import base_lin_vel_keyboard, base_ang_vel_keyboard, base_previous_lin_vel_keyboard
 from .Rewards import previous_actions_keyword, current_actions_keyword, joint_acceleration_keyword
 from .Rewards import count_limit_vel_keyword, count_joint_limits_keyword, offset_keyword
-
+import pickle
 
 default_pos = [0.5, 0.32, 0.5] * 4
 
@@ -138,8 +138,33 @@ class RobotConfig(BaseConfiguration):
         self.dones = None
         self.reward = None
 
+        self.save_actions = False
+        self.saved_observation = []
+        self.saved_actions = []
+        self.track_robot = 0
+
     def compute_env_distance(self):
         return self.root_states[:, :3] - self.init_root_state[:, :3]
+    
+    def get_record_robot(self):
+        self.track_robot = self.curricula.get_robot_in_level_zero()
+        self.save_actions = True
+
+    def stop_record_robot(self):
+        self.save_actions = False
+
+        with open("record_observations_1.pickle", "wb") as f:
+            pickle.dump(self.saved_observation, f)
+
+        with open("record_actions_1.pickle", "wb") as f:
+            pickle.dump(self.saved_actions, f)
+
+        self.saved_actions = []
+        self.saved_observation = []
+
+    def store_information(self, obs, act):
+        self.saved_actions.append(act[self.track_robot])
+        self.saved_observation.append(obs[self.track_robot])
 
     def activate_randomization(self):
         self.randomization_activated = True
@@ -671,6 +696,9 @@ class RobotConfig(BaseConfiguration):
                 dones = self.finished
                 info = None
 
+            if self.save_actions:
+                self.store_information(obs, self.desired_config)
+
         return obs, obs_expert, self.actions, self.reward, dones, info, closed_simulation
 
     def compute_graphics(self):
@@ -707,13 +735,21 @@ class RobotConfig(BaseConfiguration):
         #     dim=-1
         # )
 
+        # obs = torch.cat((
+        #     self.projected_gravity,
+        #     (self.dof_pos - self.default_dof_pos),
+        #     self.dof_vel * 0.05,
+        #     self.actions,
+        #     self.base_ang_vel * 0.25,
+        #     self.base_lin_vel * 2.0),
+        #     dim=-1
+        # )
+
         obs = torch.cat((
             self.projected_gravity,
             (self.dof_pos - self.default_dof_pos),
             self.dof_vel * 0.05,
-            self.actions,
-            self.base_ang_vel * 0.25,
-            self.base_lin_vel * 2.0),
+            self.actions),
             dim=-1
         )
 
@@ -844,6 +880,9 @@ class RobotConfig(BaseConfiguration):
                 desired_terrains[i],
                 self.started_position[selected_env]
             )
+
+            if desired_terrains[i] == 0:
+                self.started_position[selected_env] = self.previous_started_position_recording[i]
 
     def _get_cameras_frame(self):
         if not self.recording_in_progress:

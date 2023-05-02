@@ -149,6 +149,7 @@ class PPO_PIBB:
                 'lr': 0,
                 'kl_mean': 0,
                 'student_loss': 0,
+                "mean_difference_cpg":0
             }
 
         mean_fitness = float(torch.mean(rw))
@@ -185,6 +186,7 @@ class PPO_PIBB:
         print(f"Loss mean: {loss['mean_loss']}", end="\t")
         print(f"Entropy: {loss['entropy']}")
         print(f"Student loss: {loss['student_loss']}")
+        print(f"cpg loss: {loss['mean_difference_cpg']}")
         print(f"PIBB::: variance: {self.PIBB.variance}")
         print(f"Total time (s): {total_time}")
         print(f"Rollout time (s): {rollout_time}")

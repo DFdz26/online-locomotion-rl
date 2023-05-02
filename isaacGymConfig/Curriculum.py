@@ -432,8 +432,11 @@ class AlgorithmCurriculum:
         rw_weights = RewardObj.get_rewards()
 
         rw_weights["roll_pitch"]["weight"] *= 2.25
-        rw_weights["x_velocity"]["weight"] *= 1.
+        rw_weights["yaw_vel"]["weight"] *= 1.5
+        rw_weights["x_velocity"]["weight"] /= 1.1
+        rw_weights["height_error"]["weight"] /= 10.
         rw_weights["smoothness"]["weight"] *= 2.
+        rw_weights["high_penalization_contacts"]["weight"] *= 0.6
         rw_weights["velocity_smoothness"]["weight"] *= 2.
         rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 1210.  # 1200
         # rw_weights["changed_actions"]["weight"] *= 2.5
@@ -449,8 +452,9 @@ class AlgorithmCurriculum:
             rw_weights = rewardObj.get_rewards()
 
             rw_weights["yaw_vel"]["weight"] *= 1.5
-            rw_weights["x_velocity"]["weight"] /= 1.3
+            rw_weights["x_velocity"]["weight"] /= 1.5
             rw_weights["velocity_smoothness"]["weight"] *= 1.2
+            # rw_weights["z_vel"]["weight"] *= 3
 
             rewardObj.change_rewards(rw_weights)
 
@@ -497,12 +501,14 @@ class AlgorithmCurriculum:
 
         if 0 < self.cfg.PPOCfg.start_iteration_learning == iterations:
             steps_per_iteration = self._start_PPO_(RewardObj, steps_per_iteration)
+            self.CPG_influence = 1 - 0.12
 
         if self.cfg.PIBBCfg.stop_learning and self.cfg.PIBBCfg.threshold == iterations:
             self.PIBB_learning_activated = False
 
             if self.cfg.PPOCfg.start_when_PIBB_stops and not self.PPO_activated:
                 steps_per_iteration = self._start_PPO_(RewardObj, steps_per_iteration)
+                self.CPG_influence = 1 - 0.12
 
             if self.cfg.PIBBCfg.delete_noise_at_stop:
                 print("Noise cleared")
@@ -525,7 +531,7 @@ class AlgorithmCurriculum:
         amplitude = 1.
 
         if self.PPO_activated:
-            encoder_info, amplitude = PPO.get_encoder_info()
+            encoder_info, amplitude = PPO.get_encoder_info(expert_obs)
 
         if self.PIBB_activated:
             actions_CPG = PIBB.act(observations, expert_obs) * amplitude
@@ -585,11 +591,10 @@ class AlgorithmCurriculum:
             PPO.post_step_simulation(obs, exp_obs, actions, reward_PPO, dones, info, False)
 
     def last_step_learning(self, obs, exp_obs, PIBB, PPO):
-        if self.PIBB_learning_activated:
-            PIBB.last_step(obs, exp_obs)
+        cpg_mov = PIBB.last_step(obs, exp_obs, reset=(not self.PPO_learning_activated))
 
         if self.PPO_learning_activated:
-            PPO.last_step(obs, exp_obs)
+            PPO.last_step(obs, exp_obs, cpg_mov)
 
 
 class TerrainCurriculum:
@@ -619,6 +624,9 @@ class TerrainCurriculum:
         self.reward = -999
         self.n_jumps = 0
         self.max_difficulty = 0
+
+    def get_robot_in_level_zero(self):
+        return (self.control_env == 0).nonzero()[0][0]
 
     def get_level(self):
         return self.control_step
@@ -827,3 +835,11 @@ class Curriculum:
             randomization = self.randomization_curriculum.get_level()
 
         return terrain, randomization
+    
+    def get_robot_in_level_zero(self):
+        idx = 0
+
+        if not (self.terrain_curriculum is None):
+            idx = self.terrain_curriculum.get_robot_in_level_zero()
+
+        return idx
