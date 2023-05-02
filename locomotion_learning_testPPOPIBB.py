@@ -476,7 +476,7 @@ print(f"n_out: {n_out}")
 
 latent_space_size = 12
 latent_heads_size = 32
-priv_obs = 21
+priv_obs = 21 + 3
 head_cpg_latent = None
 head_phi_amplitude = None
 
@@ -484,7 +484,7 @@ if ACTIVATE_HEIGHT_READ:
     priv_obs += 52
 
 # n_observations = 45
-n_observations = 39
+n_observations = 42
 actor_input = n_observations + latent_space_size
 
 actorArgs = NNCreatorArgs()
@@ -492,7 +492,7 @@ actorArgs = NNCreatorArgs()
 actorArgs.inputs = [actor_input]
 # actorArgs.hidden_dim = [128, 64]
 # actorArgs.hidden_dim = [256, 128]
-actorArgs.hidden_dim = [128]
+actorArgs.hidden_dim = [128, 64]
 actorArgs.outputs = [n_out if not CURRICULUM_CPG_RBFN else 12]
 
 criticArgs = NNCreatorArgs()

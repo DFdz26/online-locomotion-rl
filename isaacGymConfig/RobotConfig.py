@@ -81,6 +81,7 @@ class RobotConfig(BaseConfiguration):
         self.starting_rollout_time = 0
 
         self.actual_time = 0
+        self.start_random_vel = False
         self.randomization_activated = False
 
         super().__init__(self.cfg, self.env_config.dt)
@@ -143,6 +144,12 @@ class RobotConfig(BaseConfiguration):
         self.saved_actions = []
         self.track_robot = 0
 
+    def enable_random_body_vel_beginning(self):
+        self.start_random_vel = True
+
+    def disable_random_body_vel_beginning(self):
+        self.start_random_vel = False
+
     def compute_env_distance(self):
         return self.root_states[:, :3] - self.init_root_state[:, :3]
     
@@ -191,26 +198,19 @@ class RobotConfig(BaseConfiguration):
             self.height_samples = torch.tensor(self.terrain_config.map_heightfield).view(self.terrain_config.tot_rows,
                                                                                          self.terrain_config.tot_columns).to(self.device)
 
-    def _reset_root(self):
+    def _reset_root(self, env_ids):
 
-        env_ids = torch.ones(self.num_envs, dtype=torch.bool, device=self.device,
-                             requires_grad=False).nonzero(as_tuple=False).flatten()
+        if env_ids is None:
+            env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.int32)
 
         self.root_states[env_ids] = 0.
-        self.surpasing_limits[env_ids] = 0.
-        self.surpassing_velocity_limits[env_ids] = 0.
-
         self.root_states[env_ids, :3] = self.started_position[env_ids]
-        self.previous_robot_position[env_ids, :3] = self.root_states[:, :3].detach().clone()
-        self.previous_robot_velocity[env_ids, :3] = 0.
 
-        if not(self.previous_actions is None):
-            self.previous_actions[env_ids, :] = 0.
+        if self.start_random_vel:
+            self.root_states[env_ids, 7:13] = torch_rand_float(-0.5, 0.5, (len(env_ids), 6), device=self.device)
 
         a = [0., 0., 0., 1]
-        self.init_root_state[env_ids, :3] = self.root_states[env_ids, :3]
         self.root_states[env_ids, 3:7] = torch.FloatTensor(a).to(self.device)
-
         env_ids_int32 = env_ids.to(dtype=torch.int32)
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
                                                      gymtorch.unwrap_tensor(self.root_states),
@@ -218,20 +218,15 @@ class RobotConfig(BaseConfiguration):
 
         self.default_pose = True
 
-    def _reset_dofs(self):
+    def _reset_dofs(self, envs_ids):
+        if envs_ids is None:
+            envs_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.int32)
 
-        env_ids = torch.ones(self.num_envs, dtype=torch.bool, device=self.device,
-                             requires_grad=False).nonzero(as_tuple=False).flatten()
+        self.dof_state[envs_ids] = 0.
+        self.dof_pos[envs_ids] = self.default_dof_pos
+        self.dof_vel[envs_ids] = 0.
 
-        self.dof_state[env_ids] = 0.
-
-        for i in range(self.num_envs):
-            self.dof_pos[i] = self.default_dof_pos
-            self.dof_vel[i] = 0.
-            self.previous_dof_vel[i] = 0.
-            self.aceeleration_dof[i] = 0.
-
-        env_ids_int32 = env_ids.to(dtype=torch.int32)
+        env_ids_int32 = envs_ids.to(dtype=torch.int32)
         self.gym.set_dof_state_tensor_indexed(self.sim,
                                               gymtorch.unwrap_tensor(self.dof_state),
                                               gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
@@ -240,12 +235,32 @@ class RobotConfig(BaseConfiguration):
         if not (self.curricula is None):
             self.started_position = self.curricula.get_terrain_curriculum(self.started_position)
 
-        self._reset_root()
-        self._reset_dofs()
-
-        self.limits = None
-        self.finished.fill_(0)
         self.rep = 0
+
+    def _clean_previous_information(self, envs_id):
+        self.previous_dof_vel[envs_id] = 0.
+        self.aceeleration_dof[envs_id] = 0.
+        self.limits[envs_id] = 0.
+        self.finished[envs_id] = 0.
+        self.surpasing_limits[envs_id] = 0.
+        self.surpassing_velocity_limits[envs_id] = 0.
+        self.init_root_state[envs_id, :3] = self.root_states[envs_id, :3]
+        self.episode_length_buf[envs_id] = 0
+
+        if not(self.previous_actions is None):
+            self.previous_actions[envs_id, :] = 0.
+
+    def reset_envs(self, envs_id):
+
+        if envs_id is None:
+            envs_id = torch.arange(self.num_envs, device=self.device, dtype=torch.int32)
+
+        if len(envs_id) == 0:
+            return
+
+        self._reset_root(envs_id)
+        self._reset_dofs(envs_id)
+        self._clean_previous_information(envs_id)
 
     def check_termination(self):
         if self.limits is None:
@@ -255,15 +270,14 @@ class RobotConfig(BaseConfiguration):
 
         touching = self.rewards.high_penalization_contacts if hasattr(self.rewards,
                                                                       'high_penalization_contacts') else None
-        self.finished |= torch.all(self.limits > 1., dim=0)
+        self.finished |= self.limits > 1.
 
         if not (None is touching):
-            self.finished |= torch.all(touching > 1., dim=0)
+            self.finished |= touching > 1.
 
         all_touching = torch.all(touching > 1, dim=0) if not (None is touching) else False
         all_limits = torch.all(self.limits > 1., dim=0)
 
-        self.finished.fill_(0)
         if all_touching or all_limits:
             self.finished.fill_(1)
             print("Touching or limits")
@@ -371,6 +385,7 @@ class RobotConfig(BaseConfiguration):
         self.base_quat[:] = self.root_states[:, 3:7]
         self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
         self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
+        self.episode_length_buf += 1
 
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
         self.foot_velocities = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13
@@ -541,6 +556,7 @@ class RobotConfig(BaseConfiguration):
         if self.env_config.sensors.Activations.height_measurement_activated:
             self.height_points = self._init_height_points(torch.arange(self.num_envs, device=self.device))
         self.measured_heights = 0
+        self.episode_length_buf = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device, requires_grad=False)
 
     def __get_body_randomization_information(self, get_mass):
         if self.curricula is None:
@@ -749,6 +765,7 @@ class RobotConfig(BaseConfiguration):
             self.projected_gravity,
             (self.dof_pos - self.default_dof_pos),
             self.dof_vel * 0.05,
+            self.base_ang_vel * 0.25,
             self.actions),
             dim=-1
         )
@@ -778,7 +795,8 @@ class RobotConfig(BaseConfiguration):
             contact_forces[:, :, 1]/50 - 1,
             contact_forces[:, :, 2]/50 - 1,
             h,
-            in_contact),
+            in_contact,
+            self.base_lin_vel * 2.0),
             dim=-1
         )
 

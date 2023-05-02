@@ -7,7 +7,6 @@ from modules.logger import Logger
 
 from isaacGymConfig.Rewards import Rewards
 from isaacGymConfig.Curriculum import Curriculum
-from learningAlgorithm.PPO.History import History
 
 
 class Runner:
@@ -29,6 +28,7 @@ class Runner:
         self.num_observation_sensor = 1
         self.num_expert_observation = 1
         self.best_distance = True
+        self.long_buffer = None
         self.num_terrains = 1 if terrain_config is None else terrain_config.rows
 
         self.recording = False
@@ -37,6 +37,7 @@ class Runner:
         self.n_iterations = 0
         self.starting_training_time = 0
         self.starting_iteration_time = 0
+        self.reset_envs_flag = False
 
         self.logger.set_robot_name(self.agents.get_asset_name())
         self.logger.store_reward_param(self.rewards.reward_terms)
@@ -88,7 +89,6 @@ class Runner:
             terrains = None if max_difficulty is None else [*range(max_difficulty + 1)]
             self.agents.set_up_recording_video(terrains)
 
-
     def _learning_process_(self, iteration, rewards):
         now_time = time.time()
 
@@ -104,7 +104,8 @@ class Runner:
         self.logger.store_data(distance, rewards, self.learning_algorithm.get_weights_policy(), noise, iteration,
                                total_elapsed_time, show_plot=False)
         loss = self.learning_algorithm.update(self.policy, rewards)
-        self.learning_algorithm.print_info(rewards, iteration, total_elapsed_time, elapsed_time_iteration, loss)
+        self.learning_algorithm.print_info(rewards, iteration, total_elapsed_time, elapsed_time_iteration,
+                                           loss, self.long_buffer)
         
         ppo_info = self.learning_algorithm.get_last_PPO_info_for_logger()
         self.logger.store_PPO_run_info(ppo_info, iteration)
@@ -134,7 +135,6 @@ class Runner:
 
             if i == 300:
                 self.agents.get_record_robot()
-                
 
             for step in range(steps_per_iteration):
 
@@ -143,15 +143,19 @@ class Runner:
                 self.obs, self.obs_exp, actions, reward, dones, info, closed_simulation = self.agents.step(None,
                                                                                                            actions)
                 self._store_history()
+
+                if step == (steps_per_iteration - 1):
+                    dones.fill_(True)
+
                 self.learning_algorithm.post_step_simulation(self.obs, self.obs_exp, actions, reward * 0.5, dones, info,
                                                              closed_simulation)
+                if self.reset_envs_flag:
+                    self.agents.reset_envs(dones.nonzero())
+
                 self._recording_process()
 
                 if closed_simulation or torch.all(dones > 0):
                     break
-
-                # if i == 499 and step == (steps_per_iteration/2):
-                #     self.agents.print_flag_act()
 
             if closed_simulation:
                 break
@@ -159,6 +163,7 @@ class Runner:
             if i == 300:
                 self.agents.stop_record_robot()
 
+            self.long_buffer = torch.mean(self.agents.episode_length_buf)
             self._stop_recording()
             final_reward = self.agents.compute_final_reward()
             rewards = final_reward * 0.5
@@ -172,12 +177,13 @@ class Runner:
                     aux = self.curricula.set_control_parameters(i, final_reward, None,
                                                                 self.rewards, self.learning_algorithm,
                                                                 steps_per_iteration)
-                    steps_per_iteration, update_randomization, started_randomization = aux
+                    steps_per_iteration, update_randomization, started_randomization, self.reset_envs_flag = aux
 
                     self.agents.activate_randomization()
                     self.agents.get_new_randomization()
 
                 # Reset the environments, the reward buffers and get the first observation
+
                 self.rewards.clean_buffers()
                 self.agents.reset_all_envs()
                 self._reset_history()

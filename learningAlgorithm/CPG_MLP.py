@@ -136,7 +136,7 @@ class PPO_PIBB:
 
         return ppo_logger
 
-    def print_info(self, rw, rep, total_time, rollout_time, loss):
+    def print_info(self, rw, rep, total_time, rollout_time, loss, length_ep):
         self.PPO_info = loss
         self.rep = rep
 
@@ -190,6 +190,7 @@ class PPO_PIBB:
         print(f"PIBB::: variance: {self.PIBB.variance}")
         print(f"Total time (s): {total_time}")
         print(f"Rollout time (s): {rollout_time}")
+        print(f"Length episode : {length_ep}")
 
         if self.curricula.algorithm_curriculum.PPO_learning_activated:
             print(f"Max PPO fitness: {self.history_PPO_fitness['record']} at iteration: "

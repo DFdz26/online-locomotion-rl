@@ -523,7 +523,7 @@ class AlgorithmCurriculum:
             else:
                 self.count_increase_gamma += 1
 
-        return steps_per_iteration
+        return steps_per_iteration, self.PPO_learning_activated
 
     def get_curriculum_action(self, PPO, PIBB, observations, expert_obs, previous_obs):
         actions = None
@@ -796,6 +796,7 @@ class Curriculum:
         new_steps_per_iteration = steps_per_iteration
         randomize_properties = False
         randomized_activated = False
+        active_reset_envs = False
 
         if not (self.terrain_curriculum is None):
             self.terrain_curriculum.set_control_parameters(iterations, reward)
@@ -804,11 +805,14 @@ class Curriculum:
             randomize_properties, randomized_activated = self.randomization_curriculum.set_control_parameters(iterations)
 
         if not (self.algorithm_curriculum is None):
-            new_steps_per_iteration = self.algorithm_curriculum.set_control_parameters(iterations, reward, distance,
-                                                                                       RwObj, AlgObj,
-                                                                                       new_steps_per_iteration)
+            new_steps_per_iteration, active_reset_envs = self.algorithm_curriculum.set_control_parameters(
+                iterations,
+                reward,
+                distance,
+                RwObj, AlgObj,
+                new_steps_per_iteration)
 
-        return new_steps_per_iteration, randomize_properties, randomized_activated
+        return new_steps_per_iteration, randomize_properties, randomized_activated, active_reset_envs
 
     def get_terrain_curriculum(self, initial_positions):
         if self.terrain_curriculum is None:
