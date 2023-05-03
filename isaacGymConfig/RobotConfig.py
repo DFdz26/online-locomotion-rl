@@ -201,13 +201,14 @@ class RobotConfig(BaseConfiguration):
     def _reset_root(self, env_ids):
 
         if env_ids is None:
-            env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.int32)
+            env_ids = torch.arange(self.num_envs, device=self.device)
 
-        self.root_states[env_ids] = 0.
+        self.root_states[env_ids, :] = 0.
+        
         self.root_states[env_ids, :3] = self.started_position[env_ids]
 
-        if self.start_random_vel:
-            self.root_states[env_ids, 7:13] = torch_rand_float(-0.5, 0.5, (len(env_ids), 6), device=self.device)
+        # if self.start_random_vel:
+        #     self.root_states[env_ids, 7:13] = torch_rand_float(-0.5, 0.5, (len(env_ids), 6), device=self.device)
 
         a = [0., 0., 0., 1]
         self.root_states[env_ids, 3:7] = torch.FloatTensor(a).to(self.device)
@@ -216,13 +217,11 @@ class RobotConfig(BaseConfiguration):
                                                      gymtorch.unwrap_tensor(self.root_states),
                                                      gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
-        self.default_pose = True
 
     def _reset_dofs(self, envs_ids):
         if envs_ids is None:
-            envs_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.int32)
+            envs_ids = torch.arange(self.num_envs, device=self.device)
 
-        self.dof_state[envs_ids] = 0.
         self.dof_pos[envs_ids] = self.default_dof_pos
         self.dof_vel[envs_ids] = 0.
 
@@ -236,11 +235,17 @@ class RobotConfig(BaseConfiguration):
             self.started_position = self.curricula.get_terrain_curriculum(self.started_position)
 
         self.rep = 0
+        # self._reset_root(None)
+        # self._reset_dofs(None)
+        self.reset_envs(None)
 
     def _clean_previous_information(self, envs_id):
         self.previous_dof_vel[envs_id] = 0.
         self.aceeleration_dof[envs_id] = 0.
-        self.limits[envs_id] = 0.
+
+        if not(self.limits is None):
+            self.limits[envs_id] = 0.
+        
         self.finished[envs_id] = 0.
         self.surpasing_limits[envs_id] = 0.
         self.surpassing_velocity_limits[envs_id] = 0.
@@ -253,13 +258,14 @@ class RobotConfig(BaseConfiguration):
     def reset_envs(self, envs_id):
 
         if envs_id is None:
-            envs_id = torch.arange(self.num_envs, device=self.device, dtype=torch.int32)
+            envs_id = torch.arange(self.num_envs, device=self.device)
 
         if len(envs_id) == 0:
             return
 
         self._reset_root(envs_id)
         self._reset_dofs(envs_id)
+
         self._clean_previous_information(envs_id)
 
     def check_termination(self):
@@ -455,7 +461,6 @@ class RobotConfig(BaseConfiguration):
 
         self.root_states = gymtorch.wrap_tensor(actor_root_state)
         self.dof_state = gymtorch.wrap_tensor(dof_state_tensor)
-        self.init_dof_state = self.dof_state.detach().clone()
         self.init_root_state = self.root_states.detach().clone()
         self.dof_pos = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 0]
         self.dof_vel = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 1]

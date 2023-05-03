@@ -126,6 +126,7 @@ class Runner:
             steps_per_iteration / self.curricula.reduce_steps)
 
         closed_simulation = False
+        start_rand = False
         self.starting_training_time = time.time()
         self.learning_algorithm.prepare_training(self.agents, steps_ppo, self.num_observation_sensor,
                                                  self.num_expert_observation, self.num_actions, self.policy)
@@ -145,7 +146,7 @@ class Runner:
                 self._store_history()
 
                 if step == (steps_per_iteration - 1):
-                    dones.fill_(True)
+                    dones.fill_(1)
 
                 self.learning_algorithm.post_step_simulation(self.obs, self.obs_exp, actions, reward * 0.5, dones, info,
                                                              closed_simulation)
@@ -153,7 +154,6 @@ class Runner:
                     self.agents.reset_envs(dones.nonzero())
 
                 self._recording_process()
-
                 if closed_simulation or torch.all(dones > 0):
                     break
 
@@ -163,7 +163,7 @@ class Runner:
             if i == 300:
                 self.agents.stop_record_robot()
 
-            self.long_buffer = torch.mean(self.agents.episode_length_buf)
+            self.long_buffer = torch.mean(self.agents.episode_length_buf.to(torch.float32))
             self._stop_recording()
             final_reward = self.agents.compute_final_reward()
             rewards = final_reward * 0.5
@@ -179,8 +179,15 @@ class Runner:
                                                                 steps_per_iteration)
                     steps_per_iteration, update_randomization, started_randomization, self.reset_envs_flag = aux
 
-                    self.agents.activate_randomization()
-                    self.agents.get_new_randomization()
+                    if start_rand is False:
+                        start_rand = started_randomization
+
+                    if start_rand:
+                        self.agents.activate_randomization()
+                        self.agents.enable_random_body_vel_beginning()
+                    
+                    if update_randomization and start_rand:
+                        self.agents.get_new_randomization()
 
                 # Reset the environments, the reward buffers and get the first observation
 

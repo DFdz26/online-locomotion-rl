@@ -104,7 +104,7 @@ def config_learning_curriculum():
 
     if CURRICULUM_CPG_RBFN and not RECOVER_CPG:
         algCfg.PIBBCfg.switching_indirect_to_direct = True
-        algCfg.PIBBCfg.threshold_switching = 50
+        algCfg.PIBBCfg.threshold_switching = 70
         algCfg.PIBBCfg.decay_at_switching = 0.995
         algCfg.PIBBCfg.variance_at_switching = 0.009
         algCfg.PIBBCfg.boost_first_switching_noise = 1.
@@ -291,7 +291,7 @@ reward_list = {
     # },
 
     "high_penalization_contacts": {
-        "weight": -0.25 * 1.5 * 1.15,
+        "weight": -0.25 * 1.5 * 1.15 * 1.8,
         "reward_data": {
             "absolute_distance": True,
             "max_clip": 2.5,
@@ -324,7 +324,7 @@ reward_list = {
     },
 
     "z_vel": {
-        "weight": 0.1 * 10. * 3.5, 
+        "weight": 0.1 * 10. * 4.2, 
         "reward_data": {
             "exponential": False,
             "weight": -0.24
@@ -332,7 +332,7 @@ reward_list = {
     },
 
     "roll_pitch": {
-        "weight": 0.077 * 1.2,
+        "weight": 0.077 * 1.2 * 2.7,
         "reward_data": {
             "exponential": False,
             "weight": -0.15
@@ -340,7 +340,7 @@ reward_list = {
     },
 
     "yaw_vel": {
-        "weight": 0.028 * 1.1,
+        "weight": 0.028 * 1.1 * 1.5,
         "reward_data": {
             "exponential": False,
             "weight": -0.1,
@@ -357,7 +357,7 @@ reward_list = {
     },
 
     "x_velocity": {
-        "weight": 1. * 2 * 1.8 * 3.5, # 1.12
+        "weight": 1. * 2 * 1.8 * 2.1, # 3.8
         "reward_data": {
             "exponential": False,
             "weight": 0.178  # 0.177
@@ -492,7 +492,7 @@ actorArgs = NNCreatorArgs()
 actorArgs.inputs = [actor_input]
 # actorArgs.hidden_dim = [128, 64]
 # actorArgs.hidden_dim = [256, 128]
-actorArgs.hidden_dim = [128, 64]
+actorArgs.hidden_dim = [128]
 actorArgs.outputs = [n_out if not CURRICULUM_CPG_RBFN else 12]
 
 criticArgs = NNCreatorArgs()

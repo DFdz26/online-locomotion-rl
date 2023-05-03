@@ -36,7 +36,7 @@ class CPGRBFN(torchNet):
     def __init__(self, config, dimensions=1, load_cache=True, noise_to_zero=False, verbose=True):
 
         self.device = config["device"]
-        self.reversed_cpg = False
+        self.reversed_cpg = True
         self.__n_out = 0
         self.dimensions = dimensions
         self.verbose = verbose
@@ -212,10 +212,10 @@ class CPGRBFN(torchNet):
             self.outputs[self.index_aux, started_motor + 4] = normal[self.index_aux, started_motor + 4]
             self.outputs[self.index_aux, started_motor + 5] = delayed[self.index_aux, started_motor + 5]
 
-            # if reversed:
-            #     aux_change = normal
-            #     normal = delayed
-            #     delayed = aux_change
+            if reversed:
+                aux_change = normal
+                normal = delayed
+                delayed = aux_change
 
             started_motor += 6
 
