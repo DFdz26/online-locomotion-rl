@@ -139,10 +139,11 @@ class Runner:
 
             for step in range(steps_per_iteration):
 
-                actions = self.learning_algorithm.act(self.obs, self.obs_exp, self.prev_obs)
+                actions, ppo_rw = self.learning_algorithm.act(self.obs, self.obs_exp, self.prev_obs)
 
                 self.obs, self.obs_exp, actions, reward, dones, info, closed_simulation = self.agents.step(None,
                                                                                                            actions)
+                reward = self.rewards.include_ppo_reward_penalization(ppo_rw, reward)
                 self._store_history()
 
                 if step == (steps_per_iteration - 1):

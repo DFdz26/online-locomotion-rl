@@ -15,7 +15,8 @@ CPG-RBFN class for locomotion learning
 # math-related modules
 import torch  # cpu & gpu array
 
-from modules.cpg import CPG  # Central Pattern Generator
+from modules.cpg import CPG  # SO2 Central Pattern Generator
+from modules.hopf_oscillators import HopfOscillators  # Hopf Central Pattern Generator
 from modules.mn import MN  # Motor Neurons
 from modules.rbf import RBF  # Central Pattern Generator
 # network
@@ -26,6 +27,7 @@ from modules.utils import CPGUtils  # Motor Neurons
 key_direct = "direct"
 key_indirect = "indirect"
 key_semi_indirect = "semi_indirect"
+types_cpg = ["SO2", "hopf"]
 
 
 # ------------------- class CPGRBFN ---------------------
@@ -35,6 +37,10 @@ class CPGRBFN(torchNet):
     # ---------------------- constructor ------------------------
     def __init__(self, config, dimensions=1, load_cache=True, noise_to_zero=False, verbose=True):
 
+        if config["CPG"]["TYPE"] not in types_cpg:
+            raise ValueError("CPG type not supported")
+
+        self.cpg_type = config["CPG"]["TYPE"]
         self.device = config["device"]
         self.reversed_cpg = True
         self.__n_out = 0
@@ -43,6 +49,16 @@ class CPGRBFN(torchNet):
         self.dic_converter = None
         self.__encoding = None
         self.load_cache = load_cache
+
+        self.cpg_functions = {
+            "SO2": self._get_rbf_activations_SO2,
+            "hopf": self._get_rbf_activations_hopf,
+        }
+
+        self.create_cpgs_functions = {
+            "SO2": self._create_SO2_CPG,
+            "hopf": self._create_hopf_oscillators_CPG,
+        }
 
         super().__init__(config["device"])
         self.index_aux = torch.arange(self.dimensions, device=self.device, requires_grad=False)
@@ -62,11 +78,13 @@ class CPGRBFN(torchNet):
         self.abs_weights = config['abs_weights'] if 'abs_weights' in config else False
 
         # ---------------------- initialize modular neural network ------------------------
-        # (update in this order)
 
         # CPG
-        self.cpg = CPG(cpg_gamma=float(config['CPG']['GAMMA']), cpg_phi=float(config['CPG']['PHI']),
-                       tinit=self.__t_init, device=self.device)
+        self.cpg = None
+        self.cpg_history = None
+        self.CPG_period = None
+
+        self.create_cpgs_functions[self.cpg_type](config['CPG']["PARAMETERS"], config)
 
         # RBF
         self.rbf = RBF(self.cpg, self.__n_state, sigma=float(config['RBF']['SIGMA']), tinit=self.__t_init,
@@ -76,7 +94,6 @@ class CPGRBFN(torchNet):
         self.mn = MN(self.__hyperparams, outputgain=self.mn_gain, device=self.device, dimensions=dimensions,
                      load_cache=self.load_cache, abs_weights=self.abs_weights)
 
-        self.cpg_history = CPGUtils(config, self.cpg, verbose=True)
 
         # ---------------------- initialize neuron activity ------------------------
         self.inputs = self.zeros(1, self.__n_in)
@@ -84,9 +101,31 @@ class CPGRBFN(torchNet):
 
         # initialize cpg activity
         self.reset()
-        self.cpg_history.init_buffers()
+        self._compute_cpg_frequency()
 
-        self.CPG_period = self.cpg_history.period
+    def _create_SO2_CPG(self, config_CPG, config):
+        self.cpg = CPG(cpg_gamma=float(config_CPG['GAMMA']), cpg_phi=float(config_CPG['PHI']),
+                       tinit=self.__t_init, device=self.device)
+        self.cpg_history = CPGUtils(config, self.cpg, verbose=True)
+
+    def _create_hopf_oscillators_CPG(self, config_CPG, config):
+        self.cpg = HopfOscillators(
+            config_CPG["INIT_AMPLITUDE"],
+            config_CPG["INIT_PHASE"],
+            config_CPG["INTRINSIC_FREQUENCY"],
+            config_CPG["INTRINSIC_AMPLITUDE"],
+            config_CPG["COMMAND_SIGNAL_A"],
+            config_CPG["COMMAND_SIGNAL_D"],
+            config_CPG["EXPECTED_DT"],
+            self.device
+        )
+        self.CPG_period = 1/config_CPG["INTRINSIC_FREQUENCY"]
+
+    def _compute_cpg_frequency(self):
+        if self.cpg_type == "SO2":
+            self.cpg_history.init_buffers()
+
+            self.CPG_period = self.cpg_history.period
 
     def get_weights(self):
         return self.mn.W
@@ -177,6 +216,7 @@ class CPGRBFN(torchNet):
     def get_cpg_delayed(self, steps_delayed):
         return self.cpg_history.read_stored(steps_delayed)
 
+    # ---------------------- decoding from output NN------------------------
     def __output_from_direct_encoding(self):
         self.__n_out = self.__n_motors
 
@@ -224,18 +264,6 @@ class CPGRBFN(torchNet):
         delayed = rbfn_delayed_out
 
         started_motor = 0
-
-        # for i in range(self.__n_out):
-        # 	self.outputs[self.index_aux, [self.aux_m[i], self.aux_m[i] + 6]] = normal[self.index_aux, i]
-        # 	self.outputs[self.index_aux, [self.aux_m_d[i], self.aux_m_d[i]]] = delayed[self.index_aux, i]
-
-        # self.outputs[self.index_aux, [0, 6]] = normal[self.index_aux, 0]
-        # self.outputs[self.index_aux, [0, 6]] = normal[self.index_aux, 0]
-        # self.outputs[self.index_aux, [0, 6]] = normal[self.index_aux, 0]
-
-        # self.outputs[self.index_aux, [0, 6]] = normal[self.index_aux, 0]
-        # self.outputs[self.index_aux, [0, 6]] = normal[self.index_aux, 0]
-        # self.outputs[self.index_aux, [0, 6]] = normal[self.index_aux, 0]
 
         for _ in range(int(self.__n_leg / 2)):
             self.outputs[self.index_aux, started_motor] = normal[self.index_aux, 0]
@@ -286,14 +314,23 @@ class CPGRBFN(torchNet):
         self.cpg.reset()
         self.mn.reset()
 
-    def forward(self, x, output_mult=1.):
-
-        # update cpg-rbf
+    def _get_rbf_activations_SO2(self, amplitude_change, frequency_change, dt):
         self.cpg_o = self.cpg()
         self.cpg_history.store_cpg_steps(self.cpg_o)
 
         self.bf = self.rbf(self.cpg_o)
         self.bf_delayed = self.rbf(self.get_cpg_delayed(int(0.5 * self.CPG_period)))
+
+    def _get_rbf_activations_hopf(self, amplitude_change, frequency_change, dt):
+        self.cpg_o = self.cpg(amplitude_change, frequency_change, dt)
+
+        self.bf = self.rbf(self.cpg_o)
+        self.bf_delayed = self.rbf(-1 * self.cpg_o)
+
+    def forward(self, amplitude_change=0.0, frequency_change=0.0, dt=None, output_mult=1.):
+
+        # update cpg-rbf
+        self.cpg_functions[self.cpg_type](amplitude_change, frequency_change, dt)
 
         # update motor neurons
         motor1 = self.mn(self.bf)

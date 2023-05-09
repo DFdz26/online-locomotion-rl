@@ -353,6 +353,7 @@ class AlgorithmCurrCfg:
 
         boost_kl_distance = 50.
         decay_boost_kl_distance = 0.92
+        n_iterations_learning_from_CPG_RBFN = 700
 
     class PIBBCfg:
         stop_learning = True
@@ -397,6 +398,9 @@ class AlgorithmCurriculum:
 
         self.PPO_activated = False
         self.PIBB_activated = False
+        self.learning_actor_from_cpg = False
+        self.iteration_starting_CPG_teacher = self.cfg.PPOCfg.start_iteration_learning - \
+                                              self.cfg.PPOCfg.n_iterations_learning_from_CPG_RBFN
 
         if cfg.StoredDistance.activate_store_distance:
             self.stored_distance = torch.zeros(cfg.StoredDistance.size,
@@ -502,6 +506,11 @@ class AlgorithmCurriculum:
         if 0 < self.cfg.PPOCfg.start_iteration_learning == iterations:
             steps_per_iteration = self._start_PPO_(RewardObj, steps_per_iteration)
             self.CPG_influence = 1 - 0.12
+            self.learning_actor_from_cpg = False
+
+        if 0 < self.iteration_starting_CPG_teacher == iterations and not self.learning_actor_from_cpg:
+            self.PPO.activate_learn_from_cpg_rbfn()
+            self.learning_actor_from_cpg = True
 
         if self.cfg.PIBBCfg.stop_learning and self.cfg.PIBBCfg.threshold == iterations:
             self.PIBB_learning_activated = False
@@ -509,6 +518,8 @@ class AlgorithmCurriculum:
             if self.cfg.PPOCfg.start_when_PIBB_stops and not self.PPO_activated:
                 steps_per_iteration = self._start_PPO_(RewardObj, steps_per_iteration)
                 self.CPG_influence = 1 - 0.12
+                self.learning_actor_from_cpg = False
+                self.PPO.deactivate_learn_from_cpg_rbfn()
 
             if self.cfg.PIBBCfg.delete_noise_at_stop:
                 print("Noise cleared")
@@ -525,10 +536,17 @@ class AlgorithmCurriculum:
 
         return steps_per_iteration, self.PPO_learning_activated
 
+    def _get_error_ppo_cpg_actions(self, PPO_act, PIBB_act):
+        error_ppo = torch.zeros()
+        if self.PPO_activated:
+            error_ppo = torch.norm(PPO_act - PIBB_act)
+            return error_ppo
+
     def get_curriculum_action(self, PPO, PIBB, observations, expert_obs, previous_obs):
         actions = None
         actions_CPG = None
         amplitude = 1.
+        rw_ppo_diff_cpg = None
 
         if self.PPO_activated:
             encoder_info, amplitude = PPO.get_encoder_info(expert_obs)
@@ -541,6 +559,7 @@ class AlgorithmCurriculum:
 
         if self.PPO_activated:
             actions_PPO = PPO.act(observations, expert_obs, previous_obs, actions_CPG, actions_mult=1.)
+            rw_ppo_diff_cpg = torch.sum(torch.abs(actions_CPG - actions_PPO), dim=-1)
 
             # Scale the output to be [-2, 2]
             # for i in range(len(actions_PPO)):
@@ -553,12 +572,16 @@ class AlgorithmCurriculum:
             else:
                 actions = self.CPG_influence * actions + (1 -self.CPG_influence) * actions_PPO
 
+        elif self.learning_actor_from_cpg:
+            PPO.save_data_teacher_student_actor(observations, expert_obs, actions_CPG)
+
         self.gamma = (1 - self.CPG_influence)
 
-        return actions
+        return actions, rw_ppo_diff_cpg
 
     def update_curriculum_learning(self, policy, rewards, PPO, PIBB):
         information_Actor_critic = None
+        cpg_as_teacher_information = None
         scale_PIBB = 1.
         self.PPO = PPO
 
@@ -570,13 +593,15 @@ class AlgorithmCurriculum:
                 scale_PIBB -= self.gamma
 
             information_Actor_critic = PPO.update(policy.get_MLP(), rewards_PPO)
+        elif self.learning_actor_from_cpg:
+            cpg_as_teacher_information = PPO.learn_from_cpg_rbfn()
 
         if self.PIBB_learning_activated:
             reward_PIBB = scale_PIBB * rewards
 
             PIBB.update(policy.get_CPG_RBFN(), reward_PIBB)
 
-        return information_Actor_critic
+        return information_Actor_critic, cpg_as_teacher_information
 
     def post_step_simulation(self, obs, exp_obs, actions, reward, dones, info, PPO, PIBB):
         if self.PIBB_learning_activated:

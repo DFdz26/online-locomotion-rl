@@ -64,6 +64,9 @@ class PPOArgs:
     # coef_differences_CPG = 10
     coef_differences_CPG = 9
 
+    mini_batches_cpg_def = 100
+    learning_rate_cpg_rbfn = 1.e-3
+
 
 class PPO:
 
@@ -75,6 +78,7 @@ class PPO:
         self.test = False
         self.expert = False
         self.store_primitive_movement = store_primitive_movement
+        self.learn_from_cpg_rbfn = False
 
         # PPO components
         self.actor_critic = actor_critic
@@ -98,9 +102,19 @@ class PPO:
         self.step_simulation = Memory.Step()
 
         self.learning_rate = self.cfg.learning_rate
+        self.optimizer_learn_from_cpg = None
 
     def get_info_algorithm(self, **kwargs):
         return self.cfg
+
+    def activate_learn_from_cpg_rbfn(self):
+        self.learn_from_cpg_rbfn = True
+        self.optimizer_learn_from_cpg = optim.Adam(self.actor_critic.parameters(), lr=self.cfg.learning_rate_cpg_rbfn)
+
+    def deactivate_learn_from_cpg_rbfn(self):
+        self.learn_from_cpg_rbfn = False
+        self.optimizer_learn_from_cpg = None
+        self.memory.clear()
 
     def prepare_training(self, env_class, steps_per_iteration, num_observations, expert_obs, num_actions, policy):
         self.init_memory(env_class.num_envs, steps_per_iteration, num_observations, expert_obs, num_actions,
@@ -153,6 +167,31 @@ class PPO:
 
             return self.step_simulation.actions
 
+    def learn_from_cpg_rbfn(self):
+        mean_loss = 0
+
+        for obs_batch, expert_obs, critic_observations_batch, actions_batch, rewards_batch, \
+                primitive_movement_batch in self.memory.create_mini_batches_teacher(self.cfg.mini_batches_cpg_def):
+            self.actor_critic.act_expert_encoder(expert_obs)
+            action = self.actor_critic.act(obs_batch, expert_obs, primitive_movement_batch)
+            loss_ = F.mse_loss(action, primitive_movement_batch).mean()
+
+            critic = self.actor_critic.evaluate(critic_observations_batch, expert_obs, primitive_movement_batch)
+            loss_ += F.mse_loss(critic, rewards_batch).mean()
+
+            mean_loss += float(loss_)
+
+            self.optimizer.zero_grad()
+            loss_.backward()
+            self.optimizer_learn_from_cpg.step()
+
+        num_updates = self.cfg.num_learning_epochs * self.cfg.num_mini_batches
+        mean_loss /= num_updates
+
+        self.memory.clear()
+
+        return mean_loss
+
     def post_step_simulation(self, obs, exp_obs, actions, reward, dones, info, closed_simulation):
         if info is None:
             info = []
@@ -161,6 +200,15 @@ class PPO:
 
     def process_env_step(self, rewards, dones, infos):
         self.step_simulation.rewards = rewards.clone()
+
+        if not self.learn_from_cpg_rbfn:
+            self._process_env_step_ppo_learning_(dones, infos)
+
+        self.memory.add_steps_into_memory(self.step_simulation)
+        self.step_simulation.clear()
+        self.actor_critic.reset()
+
+    def _process_env_step_ppo_learning_(self, dones, infos):
         self.step_simulation.dones = dones
 
         # Bootstrapping on time-outs
@@ -170,8 +218,6 @@ class PPO:
 
         # Record the step_simulation
         self.memory.add_steps_into_memory(self.step_simulation)
-        self.step_simulation.clear()
-        self.actor_critic.reset()
 
     def get_policy_weights(self):
         return self.actor_critic.get_weights()
@@ -205,6 +251,13 @@ class PPO:
         print(f"Total time (s): {total_time}")
         print(f"Rollout time (s): {rollout_time}")
         print("=============================")
+
+    def save_data_teacher_student_actor(self, observation, observation_expert, cpg_activations):
+        self.actor_critic.act_expert_encoder(observation_expert)
+        self.step_simulation.actions = self.actor_critic.act(observation, observation_expert, cpg_activations).detach()
+        self.step_simulation.observations = observation.detach()
+        self.step_simulation.observation_expert = observation_expert.detach()
+        self.step_simulation.primitive_movement = cpg_activations.detach()
 
     def update(self, policy, rewards):
         mean_value_loss = 0

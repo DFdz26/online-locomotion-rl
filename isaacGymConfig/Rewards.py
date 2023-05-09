@@ -613,6 +613,9 @@ class Rewards(IndividualReward):
         self.discrete_rewards = discrete_rewards
 
         self.change_rewards(rewards)
+        self.ignore_rewards = [
+            "ppo_penalization"
+        ]
 
     def get_rewards(self):
         return self.reward_terms
@@ -624,6 +627,16 @@ class Rewards(IndividualReward):
         for reward_name in self.reward_terms.keys():
             getattr(self, '_prepare_buffer_' + reward_name + '_term_')()
 
+    def include_ppo_reward_penalization(self, penalization, rewards):
+        if penalization is None:
+            return rewards
+
+        weight = self.reward_terms["ppo_penalization"]["weight"]
+
+        rewards += weight * penalization
+
+        return rewards
+
     def compute_rewards_in_state(self, simulation_info):
         rw = 0
         current_time = time.time()
@@ -634,6 +647,10 @@ class Rewards(IndividualReward):
         self.previous_time = time.time()
 
         for reward_name in self.reward_terms.keys():
+
+            if reward_name in self.ignore_rewards:
+                continue
+
             reward_data = None if not ("reward_data" in self.reward_terms[reward_name]) else \
                 self.reward_terms[reward_name]['reward_data']
             weight = self.reward_terms[reward_name]['weight']
@@ -661,6 +678,9 @@ class Rewards(IndividualReward):
             return self.current_reward
         else:
             for reward_name in self.reward_terms.keys():
+                if reward_name in self.ignore_rewards:
+                    continue
+
                 weight = self.reward_terms[reward_name]['weight']
                 reward_data = None if not ("reward_data" in self.reward_terms[reward_name]) else \
                     self.reward_terms[reward_name]['reward_data']

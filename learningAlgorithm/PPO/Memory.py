@@ -63,6 +63,46 @@ class Memory:
         self.mu = torch.zeros(num_step_per_env, num_envs, actions_shape, device=self.device, requires_grad=False)
         self.sigma = torch.zeros(num_step_per_env, num_envs, actions_shape, device=self.device, requires_grad=False)
 
+    def add_teacher_steps(self, step: Step):
+
+        self.observations[self.step].copy_(step.observations)
+        self.observation_expert[self.step].copy_(step.observation_expert)
+        self.actions[self.step].copy_(step.actions)
+        self.primitive_movement[self.step].copy_(step.primitive_movement)
+        self.rewards[self.step].copy_(step.rewards)
+
+        self.step += 1
+        self.step %= self.num_step_per_env
+
+    def create_mini_batches_teacher(self, num_mini_batches):
+        batch_size = self.num_envs * self.num_step_per_env
+        mini_batch_size = batch_size // num_mini_batches
+
+        # Randomize the samples optimizes the learning process
+        indices = torch.randperm(num_mini_batches * mini_batch_size, requires_grad=False, device=self.device)
+
+        observations = self.observations.flatten(0, 1)
+        expert_observations = self.observation_expert.flatten(0, 1)
+        critic_observations = observations
+        rewards = self.rewards.flatten(0, 1)
+
+        primitive_movement = self.primitive_movement.flatten(0, 1) if self.store_primitive_movement else None
+        actions = self.actions.flatten(0, 1)
+
+        for i in range(num_mini_batches):
+            start = i * mini_batch_size
+            end = (i + 1) * mini_batch_size
+            batch_idx = indices[start:end]
+
+            primitive_movement_batch = primitive_movement[batch_idx] if self.store_primitive_movement else None
+            obs_batch = observations[batch_idx]
+            expert_obs = expert_observations[batch_idx]
+            critic_observations_batch = critic_observations[batch_idx]
+            actions_batch = actions[batch_idx]
+            rewards_batch = rewards[batch_idx]
+            yield obs_batch, expert_obs, critic_observations_batch, actions_batch, rewards_batch, \
+                primitive_movement_batch
+
     def add_steps_into_memory(self, step: Step):
         if self.step >= self.num_step_per_env:
             raise AssertionError("Rollout buffer overflow")

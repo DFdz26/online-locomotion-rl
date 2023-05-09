@@ -215,10 +215,6 @@ class PPO_PIBB:
 
     def get_noise(self):
         return self.PIBB.get_noise()
-    
-    def get_PPO_data(self):
-        ppo_data = None
-
 
     def act(self, observation, expert_obs, history_obs):
         if self.test:
@@ -230,10 +226,10 @@ class PPO_PIBB:
             # return PIBB_actions 
             # return self.learnt_weight["PPO"]* PPO_actions 
         else:
-            action = self.curricula.act_curriculum(observation, expert_obs, history_obs, self.PPO, self.PIBB)
+            action, rw_ppo_diff_cpg = self.curricula.act_curriculum(observation, expert_obs, history_obs, self.PPO, self.PIBB)
             self.gamma_PPO = self.curricula.algorithm_curriculum.gamma
 
-            return action
+            return action, rw_ppo_diff_cpg
 
 
 if __name__ == "__main__":

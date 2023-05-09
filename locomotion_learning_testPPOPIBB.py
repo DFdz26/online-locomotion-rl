@@ -59,6 +59,8 @@ num_prev_obs = 15
 device = "cuda:0"
 show_PPO_graph = True
 
+intrinsic_frequency_cpg = 1.0
+
 if RECOVER_CPG:
     start_PPO_acting_iteration = 1
 
@@ -85,7 +87,7 @@ def config_camera(activate, _env_config: EnvConfig, _logger: Logger, frames, fps
             vSett.fps = fps
 
             settings.append(vSett)
-        
+
         settings[0].filename = 'easy'
         settings[1].filename = 'medium'
         settings[2].filename = 'hard'
@@ -204,7 +206,6 @@ def config_terrain(env_config):
         # }
     ]
 
-
     terrain_com_conf = TerrainComCfg()
 
     # Compute the number of needed columns
@@ -219,24 +220,24 @@ def config_terrain(env_config):
         curriculum_terr = TerrainCurrCfg()
 
         curriculum_terr.object = terrain_obj
-        delay = 0 
+        delay = 0
         first_curr = start_PPO_acting_iteration + 70 + delay
         second_curr = start_PPO_acting_iteration + 120 + delay
         third_curr = start_PPO_acting_iteration + 180 + delay
-        fourth_curr = start_PPO_acting_iteration + 240  + delay # 700
-        fifth_curr = start_PPO_acting_iteration + 360 + delay # 1750
-        six_curr = start_PPO_acting_iteration + 470 + delay # 1750
-        seventh_curr = start_PPO_acting_iteration + 600 + delay # 1750
-        eight_curr = start_PPO_acting_iteration + 700 + delay # 1750
+        fourth_curr = start_PPO_acting_iteration + 240 + delay  # 700
+        fifth_curr = start_PPO_acting_iteration + 360 + delay  # 1750
+        six_curr = start_PPO_acting_iteration + 470 + delay  # 1750
+        seventh_curr = start_PPO_acting_iteration + 600 + delay  # 1750
+        eight_curr = start_PPO_acting_iteration + 700 + delay  # 1750
         curriculum_terr.Control.threshold = {
-            first_curr: False, 
-            second_curr: False, 
-            third_curr:False, 
-            fourth_curr:False, 
-            fifth_curr:False, 
-            six_curr:False, 
-            seventh_curr:False,
-            eight_curr:False}
+            first_curr: False,
+            second_curr: False,
+            third_curr: False,
+            fourth_curr: False,
+            fifth_curr: False,
+            six_curr: False,
+            seventh_curr: False,
+            eight_curr: False}
         curriculum_terr.percentage_step = 0.32
     else:
         curriculum_terr = None
@@ -324,7 +325,7 @@ reward_list = {
     # },
 
     "z_vel": {
-        "weight": 0.1 * 10. * 4.2, 
+        "weight": 0.1 * 10. * 4.2,
         "reward_data": {
             "exponential": False,
             "weight": -0.24
@@ -357,31 +358,34 @@ reward_list = {
     },
 
     "x_velocity": {
-        "weight": 1. * 2 * 1.8 * 2.1, # 3.8
+        "weight": 1. * 2 * 1.8 * 2.1,  # 3.8
         "reward_data": {
             "exponential": False,
             "weight": 0.178  # 0.177
         }
     },
 
-     "velocity_smoothness": {
+    "velocity_smoothness": {
         "weight": 0.08 * 0.75,
         "reward_data": {
-            "weight_vel": 0.01, 
-            "weight_acc": 0.00002,  
-            "weight": -0.0005,  
+            "weight_vel": 0.01,
+            "weight_acc": 0.00002,
+            "weight": -0.0005,
         }
     },
 
     "limits": {
         "weight": 0.1,
         "reward_data": {
-            "velocity_limits": 1., 
-            "joint_limits": 1.,  
-            "weight": -1,  
+            "velocity_limits": 1.,
+            "joint_limits": 1.,
+            "weight": -1,
         }
     },
 
+    "ppo_penalization": {
+        "weight": -0.1,
+    }
 
     # "vel_cont": {
     #     "weight": -0.2,  # 0.25
@@ -447,9 +451,25 @@ hyperparam = {
     "ENCODING": encoding
 }
 
+# cpg_param = {
+#     "TYPE": "SO2",
+#     "PARAMETERS": {
+#         "GAMMA": 1.01,
+#         "PHI": 0.06
+#     },
+# }
+
 cpg_param = {
-    "GAMMA": 1.01,
-    "PHI": 0.06
+    "TYPE": "hopf",
+    "PARAMETERS": {
+        "INIT_AMPLITUDE": 0.2,
+        "INIT_PHASE": 0.0,
+        "INTRINSIC_FREQUENCY": intrinsic_frequency_cpg,
+        "INTRINSIC_AMPLITUDE": 0.2,
+        "COMMAND_SIGNAL_A": 1.0,
+        "COMMAND_SIGNAL_D": 1.0,
+        "EXPECTED_DT": dt * iterations_without_control,
+    },
 }
 
 cpg_utils = {
@@ -529,7 +549,6 @@ else:
     expertArgs.outputs = [latent_space_size]
     space_student = latent_space_size
 
-
 studentArgs = NNCreatorArgs()
 studentArgs.inputs = [num_prev_obs * n_observations]
 # criticArgs.hidden_dim = [128, 64]
@@ -539,7 +558,8 @@ studentArgs.outputs = [space_student]
 actor_std_noise = 1.
 
 actorCritic = ActorCritic(actorArgs, criticArgs, actor_std_noise, expertArgs, studentArgs, debug_mess=True,
-                          scale_max=2, scale_min=-2, head_encoder_cpg_actions=head_cpg_latent, head_cpg_phi_amplitude=head_phi_amplitude)
+                          scale_max=2, scale_min=-2, head_encoder_cpg_actions=head_cpg_latent,
+                          head_cpg_phi_amplitude=head_phi_amplitude)
 
 ppo_cfg = PPOArgs()
 ppo_cfg.num_past_actions = num_prev_obs
@@ -551,13 +571,15 @@ pibb = PIBB(rollouts, h, 1, n_kernels * n_out, decay, variance, device="cuda:0",
 env_config = EnvConfig()
 config_env()
 
-logger = Logger(save=SAVE_DATA, frequency=frequency_logger, frequency_plot=frequency_plot, PIBB_param=pibb.get_hyper_parameters(), nn_config=config, show_PPO_graph=show_PPO_graph)
-config_camera(ACTIVE_RECORDING_CAMERA, env_config, logger, step_env, int(1/0.01))
+logger = Logger(save=SAVE_DATA, frequency=frequency_logger, frequency_plot=frequency_plot,
+                PIBB_param=pibb.get_hyper_parameters(), nn_config=config, show_PPO_graph=show_PPO_graph)
+config_camera(ACTIVE_RECORDING_CAMERA, env_config, logger, step_env, int(1 / 0.01))
 
 terrain_obj, terrain_curr = config_terrain(env_config)
 alg_curr = config_learning_curriculum()
 rad_curr = config_randomization_curriculum()
-curricula = Curriculum(rollouts, device=device, terrain_config=terrain_curr, algorithm_config=alg_curr, randomization_config=rad_curr)
+curricula = Curriculum(rollouts, device=device, terrain_config=terrain_curr, algorithm_config=alg_curr,
+                       randomization_config=rad_curr)
 logged = False
 
 policy = MLP_CPG(actorCritic, cpg_rbf_nn)
@@ -567,8 +589,10 @@ learning_algorithm = PPO_PIBB(ppo, pibb, curricula)
 if RECOVER_CPG:
     learning_algorithm.read_data_point(cpg_filename, logger, policy, recover_MLP=False)
 
-history_obj = History(rollouts, num_prev_obs, observation_shape=n_observations, device=device) if ACTIVATE_HISTORY else None
-robot = Runner(policy, learning_algorithm, logger, config_file, env_config, reward_obj, n_out if not CURRICULUM_CPG_RBFN else 12,
+history_obj = History(rollouts, num_prev_obs, observation_shape=n_observations,
+                      device=device) if ACTIVATE_HISTORY else None
+robot = Runner(policy, learning_algorithm, logger, config_file, env_config, reward_obj,
+               n_out if not CURRICULUM_CPG_RBFN else 12,
                terrain_obj, curricula=curricula, verbose=True, store_observations=True, history_obj=history_obj)
 
 try:
