@@ -62,7 +62,7 @@ class PPOArgs:
 
     # coef_differences_CPG = None
     # coef_differences_CPG = 10
-    coef_differences_CPG = 8
+    coef_differences_CPG = 9
 
 
 class PPO:

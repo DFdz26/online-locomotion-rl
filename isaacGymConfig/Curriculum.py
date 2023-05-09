@@ -435,7 +435,7 @@ class AlgorithmCurriculum:
         rw_weights["yaw_vel"]["weight"] *= 1.5
         rw_weights["x_velocity"]["weight"] /= 1.1
         rw_weights["height_error"]["weight"] /= 10.
-        rw_weights["smoothness"]["weight"] *= 2.
+        # rw_weights["smoothness"]["weight"] *= 2.
         rw_weights["high_penalization_contacts"]["weight"] *= 0.6
         rw_weights["velocity_smoothness"]["weight"] *= 2.
         rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 1210.  # 1200
@@ -534,7 +534,7 @@ class AlgorithmCurriculum:
             encoder_info, amplitude = PPO.get_encoder_info(expert_obs)
 
         if self.PIBB_activated:
-            actions_CPG = PIBB.act(observations, expert_obs) * amplitude
+            actions_CPG = PIBB.act(observations, expert_obs, action_mult=1.) * amplitude
             # rbfn, rbfn_delayed = PIBB.get_rbf_activations()
 
             actions = actions_CPG

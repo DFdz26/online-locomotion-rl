@@ -286,7 +286,7 @@ class CPGRBFN(torchNet):
         self.cpg.reset()
         self.mn.reset()
 
-    def forward(self, x):
+    def forward(self, x, output_mult=1.):
 
         # update cpg-rbf
         self.cpg_o = self.cpg()
@@ -301,7 +301,7 @@ class CPGRBFN(torchNet):
 
         self.__resize_rbfn_to_n_motor(motor1, motor2)
 
-        return self.outputs
+        return self.outputs * output_mult
     
     def get_last_rbfn_activations(self):
         return self.bf, self.bf_delayed

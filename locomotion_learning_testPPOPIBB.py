@@ -50,7 +50,7 @@ TERRAIN_CURRICULUM = True
 ACTIVATE_HISTORY = True
 # rollouts = 1500
 rollouts = 1250
-iterations_without_control = 1
+iterations_without_control = 4
 num_env_colums = 100
 # learning_rate_PPO = 0.0000003  # 0.0000003
 start_PPO_acting_iteration = 150
@@ -316,12 +316,12 @@ reward_list = {
         }
     },
 
-    "smoothness": {
-        "weight": 1.,
-        "reward_data": {
-            "jerk_coef": -0.00000008,
-        }
-    },
+    # "smoothness": {
+    #     "weight": 1.,
+    #     "reward_data": {
+    #         "jerk_coef": -0.00000008,
+    #     }
+    # },
 
     "z_vel": {
         "weight": 0.1 * 10. * 4.2, 
@@ -422,8 +422,8 @@ else:
 dt = 0.005
 seconds_iteration = 5 / 2
 max_iterations = 99001
-step_env = int(seconds_iteration / dt)
-step_env = int(seconds_iteration / 0.01)
+step_env = 200
+# step_env = int(seconds_iteration / 0.01)
 
 show_final_graph = True
 
