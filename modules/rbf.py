@@ -73,6 +73,12 @@ class RBF(torchNet):
     # -------------------- handle functions -----------------------
     # (public)
 
+    def get_rbfcenter(self):
+        return self.__centers
+
+    def load_rbfcenter(self, centers):
+        self.__centers = centers
+
     def forward(self, x):
         rbf = torch.unsqueeze(torch.exp(
             -(torch.pow(x[0] - self.__centers[0], 2) + torch.pow(x[1] - self.__centers[1], 2)) / self.__sigma), 1)

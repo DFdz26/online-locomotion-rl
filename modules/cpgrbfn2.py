@@ -128,10 +128,11 @@ class CPGRBFN(torchNet):
             self.CPG_period = self.cpg_history.period
 
     def get_weights(self):
-        return self.mn.W
+        return [self.mn.W, self.rbf.get_rbfcenter()]
 
     def load_weights(self, weights):
-        self.mn.load_weights(weights)
+        self.mn.load_weights(weights[0])
+        self.rbf.load_rbfcenter(weights[1])
 
     def pretraing_process(self, pibb):
         noise = pibb.get_noise()
@@ -327,14 +328,14 @@ class CPGRBFN(torchNet):
         self.bf = self.rbf(self.cpg_o)
         self.bf_delayed = self.rbf(-1 * self.cpg_o)
 
-    def forward(self, amplitude_change=0.0, frequency_change=0.0, dt=None, output_mult=1.):
+    def forward(self, amplitude_change=0.0, frequency_change=0.0, dt=None, output_mult=1., use_wn=True):
 
         # update cpg-rbf
         self.cpg_functions[self.cpg_type](amplitude_change, frequency_change, dt)
 
         # update motor neurons
-        motor1 = self.mn(self.bf)
-        motor2 = self.mn(self.bf_delayed)
+        motor1 = self.mn(self.bf, use_wn=use_wn)
+        motor2 = self.mn(self.bf_delayed, use_wn=use_wn)
 
         self.__resize_rbfn_to_n_motor(motor1, motor2)
 

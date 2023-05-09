@@ -143,12 +143,17 @@ class MN(torchNet):
         # reset connection
         pass
 
-    def forward(self, x):
+    def forward(self, x, use_wn=True):
         if self.__n_bias > 0:
             shape = list(x.shape)
             shape[-1] = 1
             x1 = torch.cat([x, torch.ones(shape).to(self.device)], dim=-1)
         else:
             x1 = x
-        outputs = 1 * torch.tanh((x1 @ self.Wn)).reshape(self.dimensions, self.__n_out)
+
+        if use_wn:
+            outputs = 1 * torch.tanh((x1 @ self.Wn)).reshape(self.dimensions, self.__n_out)
+        else:
+            outputs = 1 * torch.tanh((x1 @ self.W)).reshape(self.dimensions, self.__n_out)
+
         return outputs

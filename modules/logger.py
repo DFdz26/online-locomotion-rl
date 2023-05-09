@@ -18,7 +18,10 @@ import matplotlib as mpl
 import json
 from .videoSaver import VideoSaver
 
-mpl.use('qt5agg')
+PLOT_IN_OTHER_FILE = False
+
+if not PLOT_IN_OTHER_FILE:
+    mpl.use('qt5agg')
 root_run_folder_name = "runs"
 
 
@@ -124,7 +127,12 @@ class Logger:
         self.mean_reward = []
         self.mean_std_height = []
         self.iteration = 0
-        self.figure, self.ax = plt.subplots(size_figure)
+
+        if not PLOT_IN_OTHER_FILE:
+            self.figure, self.ax = plt.subplots(size_figure)
+        else:
+            self.figure = None
+            self.ax = None
 
         self.figure_PPO_param = None
         self.ax_PPO_param = None
@@ -142,7 +150,9 @@ class Logger:
         
         if self.show_PPO_graph:
             self.figure_PPO_param, self.ax_PPO_param = plt.subplots(4, 2)
-        plt.ion()
+
+        if not PLOT_IN_OTHER_FILE:
+            plt.ion()
 
         self.distance = []
         self.time = []
