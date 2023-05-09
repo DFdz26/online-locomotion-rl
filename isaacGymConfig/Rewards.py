@@ -625,6 +625,9 @@ class Rewards(IndividualReward):
 
     def prepare_buffers(self):
         for reward_name in self.reward_terms.keys():
+            if reward_name in self.ignore_rewards:
+                continue
+
             getattr(self, '_prepare_buffer_' + reward_name + '_term_')()
 
     def include_ppo_reward_penalization(self, penalization, rewards):
@@ -701,6 +704,9 @@ class Rewards(IndividualReward):
         self.current_reward.fill_(0)
 
         for reward_name in self.reward_terms.keys():
+            if reward_name in self.ignore_rewards:
+                continue
+
             getattr(self, '_clean_buffer_' + reward_name + '_')()
 
         self.iterations = 0

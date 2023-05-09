@@ -103,9 +103,9 @@ class Runner:
 
         self.logger.store_data(distance, rewards, self.learning_algorithm.get_weights_policy(), noise, iteration,
                                total_elapsed_time, show_plot=False)
-        loss = self.learning_algorithm.update(self.policy, rewards)
+        loss_AC, loss_AC_with_supervision = self.learning_algorithm.update(self.policy, rewards)
         self.learning_algorithm.print_info(rewards, iteration, total_elapsed_time, elapsed_time_iteration,
-                                           loss, self.long_buffer)
+                                           loss_AC, self.long_buffer)
         
         ppo_info = self.learning_algorithm.get_last_PPO_info_for_logger()
         self.logger.store_PPO_run_info(ppo_info, iteration)

@@ -153,7 +153,7 @@ class PIBB(object):
             self.policy.reset()
         return self.output_policy
 
-    def act(self, obs, obs_exp, action_mult=1.):
-        self.output_policy = self.policy.forward(obs, output_mult=action_mult)
+    def act(self, obs, obs_exp, modification_amplitude=0.0, phase_shift=0.0, dt=None, action_mult=1.):
+        self.output_policy = self.policy.forward(amplitude_change=modification_amplitude, frequency_change=phase_shift, dt=dt, output_mult=action_mult)
 
         return self.output_policy

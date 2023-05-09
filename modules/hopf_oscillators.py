@@ -38,6 +38,7 @@ class HopfOscillators(torchNet):
 
         self._get_new_phase(dt, phase_shift)
         self._get_new_amplitude(dt, modification_amplitude)
+        # print(self.amplitude * math.sin(self.phase))
         self.output = torch.Tensor([self.amplitude * math.cos(self.phase),
                                     self.amplitude * math.sin(self.phase)]).to(self.device)
 

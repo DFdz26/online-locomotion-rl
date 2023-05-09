@@ -353,7 +353,7 @@ class AlgorithmCurrCfg:
 
         boost_kl_distance = 50.
         decay_boost_kl_distance = 0.92
-        n_iterations_learning_from_CPG_RBFN = 700
+        n_iterations_learning_from_CPG_RBFN = 70
 
     class PIBBCfg:
         stop_learning = True
