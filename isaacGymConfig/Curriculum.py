@@ -353,7 +353,7 @@ class AlgorithmCurrCfg:
 
         boost_kl_distance = 50.
         decay_boost_kl_distance = 0.92
-        n_iterations_learning_from_CPG_RBFN = 70
+        n_iterations_learning_from_CPG_RBFN = 60
 
     class PIBBCfg:
         stop_learning = True
@@ -371,6 +371,7 @@ class AlgorithmCurrCfg:
         boost_first_switching_noise = 1.
 
         start_at_begining = True
+        # decay_influence = 0.996
         decay_influence = 0.996
 
     class StoredDistance:
@@ -388,6 +389,7 @@ class AlgorithmCurriculum:
         self.count_increase_gamma = 0
         self.PPO = None
         self.verbose = verbose
+        self.start_PPO_with_importance = 0.10
 
         self.CPG_influence = 1.
         self.start_decrease_CPG = False
@@ -399,7 +401,7 @@ class AlgorithmCurriculum:
         self.PPO_activated = False
         self.PIBB_activated = False
         self.learning_actor_from_cpg = False
-        self.iteration_starting_CPG_teacher = self.cfg.PPOCfg.start_iteration_learning - \
+        self.iteration_starting_CPG_teacher = self.cfg.PIBBCfg.threshold - \
                                               self.cfg.PPOCfg.n_iterations_learning_from_CPG_RBFN
 
         if cfg.StoredDistance.activate_store_distance:
@@ -437,12 +439,14 @@ class AlgorithmCurriculum:
 
         rw_weights["roll_pitch"]["weight"] *= 2.25
         rw_weights["yaw_vel"]["weight"] *= 1.5
+        # rw_weights["x_velocity"]["weight"] /= 1.1
         rw_weights["x_velocity"]["weight"] /= 1.1
         rw_weights["height_error"]["weight"] /= 10.
         # rw_weights["smoothness"]["weight"] *= 2.
-        rw_weights["high_penalization_contacts"]["weight"] *= 0.6
+        rw_weights["high_penalization_contacts"]["weight"] *= 2.5
         rw_weights["velocity_smoothness"]["weight"] *= 2.
-        rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 1210.  # 1200
+        rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 1210./200.  # 1200
+        rw_weights["slippery"]["weight"] = 1.
         # rw_weights["changed_actions"]["weight"] *= 2.5
         #rw_weights["height_error"]["weight"] /= 2
 
@@ -458,6 +462,8 @@ class AlgorithmCurriculum:
             rw_weights["yaw_vel"]["weight"] *= 1.5
             rw_weights["x_velocity"]["weight"] /= 1.5
             rw_weights["velocity_smoothness"]["weight"] *= 1.2
+            rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 200. 
+            rw_weights["slippery"]["weight"] = 1.
             # rw_weights["z_vel"]["weight"] *= 3
 
             rewardObj.change_rewards(rw_weights)
@@ -505,7 +511,7 @@ class AlgorithmCurriculum:
 
         if 0 < self.cfg.PPOCfg.start_iteration_learning == iterations:
             steps_per_iteration = self._start_PPO_(RewardObj, steps_per_iteration)
-            self.CPG_influence = 1 - 0.12
+            self.CPG_influence = 1 - self.start_PPO_with_importance
             self.learning_actor_from_cpg = False
 
         if 0 < self.iteration_starting_CPG_teacher == iterations and not self.learning_actor_from_cpg:
@@ -517,7 +523,7 @@ class AlgorithmCurriculum:
 
             if self.cfg.PPOCfg.start_when_PIBB_stops and not self.PPO_activated:
                 steps_per_iteration = self._start_PPO_(RewardObj, steps_per_iteration)
-                self.CPG_influence = 1 - 0.12
+                self.CPG_influence = 1 - self.start_PPO_with_importance
                 self.learning_actor_from_cpg = False
                 self.PPO.deactivate_learn_from_cpg_rbfn()
 
@@ -558,6 +564,7 @@ class AlgorithmCurriculum:
             actions = actions_CPG
 
         if self.PPO_activated:
+
             actions_PPO = PPO.act(observations, expert_obs, previous_obs, actions_CPG, actions_mult=1.)
             rw_ppo_diff_cpg = torch.sum(torch.abs(actions_CPG - actions_PPO), dim=-1)
 

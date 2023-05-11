@@ -62,10 +62,10 @@ class PPOArgs:
 
     # coef_differences_CPG = None
     # coef_differences_CPG = 10
-    coef_differences_CPG = 9
+    coef_differences_CPG = None
 
     mini_batches_cpg_def = 100
-    learning_rate_cpg_rbfn = 1.e-3
+    learning_rate_cpg_rbfn = 1.e-1
 
 
 class PPO:
@@ -78,7 +78,7 @@ class PPO:
         self.test = False
         self.expert = False
         self.store_primitive_movement = store_primitive_movement
-        self.learn_from_cpg_rbfn = False
+        self.activated_learning_from_cpg_rbfn = False
 
         # PPO components
         self.actor_critic = actor_critic
@@ -108,11 +108,11 @@ class PPO:
         return self.cfg
 
     def activate_learn_from_cpg_rbfn(self):
-        self.learn_from_cpg_rbfn = True
+        self.activated_learning_from_cpg_rbfn = True
         self.optimizer_learn_from_cpg = optim.Adam(self.actor_critic.parameters(), lr=self.cfg.learning_rate_cpg_rbfn)
 
     def deactivate_learn_from_cpg_rbfn(self):
-        self.learn_from_cpg_rbfn = False
+        self.activated_learning_from_cpg_rbfn = False
         self.optimizer_learn_from_cpg = None
         self.memory.clear()
 
@@ -183,6 +183,7 @@ class PPO:
 
             self.optimizer.zero_grad()
             loss_.backward()
+            nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
             self.optimizer_learn_from_cpg.step()
 
         num_updates = self.cfg.num_learning_epochs * self.cfg.num_mini_batches
@@ -201,8 +202,9 @@ class PPO:
     def process_env_step(self, rewards, dones, infos):
         self.step_simulation.rewards = rewards.clone()
 
-        if not self.learn_from_cpg_rbfn:
+        if not self.activated_learning_from_cpg_rbfn:
             self._process_env_step_ppo_learning_(dones, infos)
+            # print(self.memory.step)
 
         self.memory.add_steps_into_memory(self.step_simulation)
         self.step_simulation.clear()
@@ -217,7 +219,7 @@ class PPO:
                 self.step_simulation.values * infos['time_outs'].unsqueeze(1).to(self.device), 1)
 
         # Record the step_simulation
-        self.memory.add_steps_into_memory(self.step_simulation)
+        # self.memory.add_steps_into_memory(self.step_simulation)
 
     def get_policy_weights(self):
         return self.actor_critic.get_weights()

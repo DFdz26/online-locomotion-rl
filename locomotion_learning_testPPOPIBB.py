@@ -59,7 +59,7 @@ num_prev_obs = 15
 device = "cuda:0"
 show_PPO_graph = True
 
-intrinsic_frequency_cpg = 5.5
+intrinsic_frequency_cpg = 7.5
 
 if RECOVER_CPG:
     start_PPO_acting_iteration = 1
@@ -311,10 +311,10 @@ reward_list = {
     },
 
     "slippery": {
-        "weight": 1.,
+        "weight": 0.,
         "reward_data": {
             # "slippery_coef": -0.0088,
-            "slippery_coef": 0.,
+            "slippery_coef": -0.007,
         }
     },
 
@@ -359,7 +359,7 @@ reward_list = {
     },
 
     "x_velocity": {
-        "weight": 1. * 2 * 1.8 * 2.1 * 1.3,  # 3.8
+        "weight": 1. * 2 * 1.8 * 2.1 * 1.7,  # 3.8
         "reward_data": {
             "exponential": False,
             "weight": 0.178  # 0.177
@@ -385,7 +385,7 @@ reward_list = {
     },
 
     "ppo_penalization": {
-        "weight": -0.1,
+        "weight": -0.001,
     }
 
     # "vel_cont": {
@@ -469,7 +469,7 @@ cpg_param = {
         "INTRINSIC_AMPLITUDE": 0.2,
         "COMMAND_SIGNAL_A": 1.0,
         "COMMAND_SIGNAL_D": 1.0,
-        "EXPECTED_DT": dt * iterations_without_control/8,
+        "EXPECTED_DT": dt * iterations_without_control/10,
     },
 }
 

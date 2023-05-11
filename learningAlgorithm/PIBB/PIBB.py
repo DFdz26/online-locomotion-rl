@@ -127,7 +127,7 @@ class PIBB(object):
         return torch.reshape(parameter_arr, _parameter_arr.shape)
 
     def update(self, policy, rewards):
-        policy.modify_weights(self.step(rewards, policy.get_weights()))
+        policy.modify_weights(self.step(rewards, policy.get_weights()[0]))
         self.post_step()
         policy.mn.apply_noise_tensor(self.get_noise())
         self.policy = policy

@@ -89,19 +89,20 @@ class Memory:
         primitive_movement = self.primitive_movement.flatten(0, 1) if self.store_primitive_movement else None
         actions = self.actions.flatten(0, 1)
 
-        for i in range(num_mini_batches):
-            start = i * mini_batch_size
-            end = (i + 1) * mini_batch_size
-            batch_idx = indices[start:end]
+        for _ in range(4):
+            for i in range(num_mini_batches):
+                start = i * mini_batch_size
+                end = (i + 1) * mini_batch_size
+                batch_idx = indices[start:end]
 
-            primitive_movement_batch = primitive_movement[batch_idx] if self.store_primitive_movement else None
-            obs_batch = observations[batch_idx]
-            expert_obs = expert_observations[batch_idx]
-            critic_observations_batch = critic_observations[batch_idx]
-            actions_batch = actions[batch_idx]
-            rewards_batch = rewards[batch_idx]
-            yield obs_batch, expert_obs, critic_observations_batch, actions_batch, rewards_batch, \
-                primitive_movement_batch
+                primitive_movement_batch = primitive_movement[batch_idx] if self.store_primitive_movement else None
+                obs_batch = observations[batch_idx]
+                expert_obs = expert_observations[batch_idx]
+                critic_observations_batch = critic_observations[batch_idx]
+                actions_batch = actions[batch_idx]
+                rewards_batch = rewards[batch_idx]
+                yield obs_batch, expert_obs, critic_observations_batch, actions_batch, rewards_batch, \
+                    primitive_movement_batch
 
     def add_steps_into_memory(self, step: Step):
         if self.step >= self.num_step_per_env:

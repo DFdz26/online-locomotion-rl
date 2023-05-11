@@ -136,7 +136,7 @@ class PPO_PIBB:
 
         return ppo_logger
 
-    def print_info(self, rw, rep, total_time, rollout_time, loss, length_ep):
+    def print_info(self, rw, rep, total_time, rollout_time, loss, length_ep, loss_AC_supervised):
         self.PPO_info = loss
         self.rep = rep
 
@@ -191,6 +191,9 @@ class PPO_PIBB:
         print(f"Total time (s): {total_time}")
         print(f"Rollout time (s): {rollout_time}")
         print(f"Length episode : {length_ep}")
+
+        if not (loss_AC_supervised is None):
+            print(f"Loss AC as student: {loss_AC_supervised}")
 
         if self.curricula.algorithm_curriculum.PPO_learning_activated:
             print(f"Max PPO fitness: {self.history_PPO_fitness['record']} at iteration: "
