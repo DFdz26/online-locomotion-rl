@@ -30,7 +30,7 @@ class RBF(torchNet):
     # -------------------- constructor -----------------------
     # (private)
 
-    def __init__(self, cpg, n_state=1, sigma=0.01, tinit=100, device=None):
+    def __init__(self, cpg, n_state=1, sigma=0.01, tinit=100, device=None, hopf=True):
 
         # initialize network hyperparameter
         super().__init__(device)
@@ -47,6 +47,7 @@ class RBF(torchNet):
         self.__n_state = n_state
         self.__t_init = tinit
         self.__sigma = sigma
+        self.hopf = hopf
 
         # rbf
         self.__centers = self.__get_rbfcenter()
@@ -57,6 +58,9 @@ class RBF(torchNet):
         unsorted_cpg = self.zeros(2, self.__t_init)
         for i in range(self.__t_init):
             cpg = self.cpg()
+            if self.hopf:
+                cpg = cpg[0]
+
             for c in range(2):
                 unsorted_cpg[c, i] = cpg[c]
         kdata = unsorted_cpg.cpu().numpy().transpose()
@@ -81,5 +85,11 @@ class RBF(torchNet):
 
     def forward(self, x):
         rbf = torch.unsqueeze(torch.exp(
-            -(torch.pow(x[0] - self.__centers[0], 2) + torch.pow(x[1] - self.__centers[1], 2)) / self.__sigma), 1)
-        return rbf.t()
+            -(torch.pow(x[:, 0].reshape(-1,1) - self.__centers[0], 2) + torch.pow(x[:, 1].reshape(-1,1) - self.__centers[1], 2)) / self.__sigma), 1)
+
+        if self.hopf:
+            rbf = rbf.flatten(0, 1)
+        else:
+            rbf = rbf.t()
+
+        return rbf

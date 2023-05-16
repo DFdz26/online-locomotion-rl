@@ -18,7 +18,7 @@ import matplotlib as mpl
 import json
 from .videoSaver import VideoSaver
 
-PLOT_IN_OTHER_FILE = False
+PLOT_IN_OTHER_FILE = True
 
 if not PLOT_IN_OTHER_FILE:
     mpl.use('qt5agg')

@@ -548,7 +548,7 @@ class AlgorithmCurriculum:
             error_ppo = torch.norm(PPO_act - PIBB_act)
             return error_ppo
 
-    def get_curriculum_action(self, PPO, PIBB, observations, expert_obs, previous_obs):
+    def get_curriculum_action(self, PPO, PIBB, observations, expert_obs, previous_obs, change_frequency=1.0):
         actions = None
         actions_CPG = None
         amplitude = 1.
@@ -558,7 +558,7 @@ class AlgorithmCurriculum:
             encoder_info, amplitude = PPO.get_encoder_info(expert_obs)
 
         if self.PIBB_activated:
-            actions_CPG = PIBB.act(observations, expert_obs, action_mult=1.) * amplitude
+            actions_CPG = PIBB.act(observations, expert_obs, action_mult=1., phase_shift=change_frequency) * amplitude
             # rbfn, rbfn_delayed = PIBB.get_rbf_activations()
 
             actions = actions_CPG
@@ -577,7 +577,7 @@ class AlgorithmCurriculum:
             if actions is None:
                 actions = actions_PPO * self.gamma
             else:
-                actions = self.CPG_influence * actions + (1 -self.CPG_influence) * actions_PPO
+                actions = self.CPG_influence * actions + (1 - self.CPG_influence) * actions_PPO
 
         elif self.learning_actor_from_cpg:
             PPO.save_data_teacher_student_actor(observations, expert_obs, actions_CPG)
@@ -585,6 +585,10 @@ class AlgorithmCurriculum:
         self.gamma = (1 - self.CPG_influence)
 
         return actions, rw_ppo_diff_cpg
+
+    @staticmethod
+    def change_maximum_change_cpg(PIBB, maximum_freq, dt=None):
+        PIBB.change_max_frequency_cpg(maximum_freq, dt)
 
     def update_curriculum_learning(self, policy, rewards, PPO, PIBB):
         information_Actor_critic = None

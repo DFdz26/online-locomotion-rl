@@ -219,20 +219,24 @@ class PPO_PIBB:
     def get_noise(self):
         return self.PIBB.get_noise()
 
-    def act(self, observation, expert_obs, history_obs):
+    def act(self, observation, expert_obs, history_obs, frequency_change=1.0):
         if self.test:
             PPO_actions = self.PPO.act(observation, expert_obs, history_obs)
-            PIBB_actions = self.PIBB.act(observation, expert_obs)
+            PIBB_actions = self.PIBB.act(observation, expert_obs, phase_shift=frequency_change)
             self.gamma_PPO = 0.5
 
             return 0.5 * PIBB_actions + self.gamma_PPO * PPO_actions
             # return PIBB_actions 
             # return self.learnt_weight["PPO"]* PPO_actions 
         else:
-            action, rw_ppo_diff_cpg = self.curricula.act_curriculum(observation, expert_obs, history_obs, self.PPO, self.PIBB)
+            action, rw_ppo_diff_cpg = self.curricula.act_curriculum(observation, expert_obs, history_obs, self.PPO,
+                                                                    self.PIBB, change_frequency=frequency_change)
             self.gamma_PPO = self.curricula.algorithm_curriculum.gamma
 
             return action, rw_ppo_diff_cpg
+
+    def change_maximum_frequency_cpg(self, maximum, dt=None):
+        self.PIBB.change_max_frequency_cpg(maximum, dt)
 
 
 if __name__ == "__main__":
