@@ -127,6 +127,7 @@ class Runner:
 
         closed_simulation = False
         start_rand = False
+        new_frequency = None
         self.starting_training_time = time.time()
         self.learning_algorithm.prepare_training(self.agents, steps_ppo, self.num_observation_sensor,
                                                  self.num_expert_observation, self.num_actions, self.policy)
@@ -141,8 +142,9 @@ class Runner:
 
                 actions, ppo_rw = self.learning_algorithm.act(self.obs, self.obs_exp, self.prev_obs)
 
-                self.obs, self.obs_exp, actions, reward, dones, info, closed_simulation = self.agents.step(None,
-                                                                                                           actions)
+                self.obs, self.obs_exp, actions, reward, \
+                    dones, info, closed_simulation = self.agents.step(None, actions,
+                                                                      iterations_without_control=new_frequency)
                 reward = self.rewards.include_ppo_reward_penalization(ppo_rw, reward)
                 self._store_history()
 
@@ -178,7 +180,8 @@ class Runner:
                     aux = self.curricula.set_control_parameters(i, final_reward, None,
                                                                 self.rewards, self.learning_algorithm,
                                                                 steps_per_iteration)
-                    steps_per_iteration, update_randomization, started_randomization, self.reset_envs_flag = aux
+                    steps_per_iteration, update_randomization, started_randomization, self.reset_envs_flag, \
+                        new_frequency = aux
 
                     if start_rand is False:
                         start_rand = started_randomization

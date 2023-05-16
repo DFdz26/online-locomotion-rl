@@ -237,7 +237,7 @@ class RobotConfig(BaseConfiguration):
         self.rep = 0
         # self._reset_root(None)
         # self._reset_dofs(None)
-        self.reset_envs(None)
+        self.reset_envs(None, _all=True)
 
     def _clean_previous_information(self, envs_id):
         self.previous_dof_vel[envs_id] = 0.
@@ -255,10 +255,13 @@ class RobotConfig(BaseConfiguration):
         if not(self.previous_actions is None):
             self.previous_actions[envs_id, :] = 0.
 
-    def reset_envs(self, envs_id):
+    def reset_envs(self, envs_id, _all=False):
+
+        if _all:
+            envs_id = torch.arange(self.num_envs, device=self.device)
 
         if envs_id is None:
-            envs_id = torch.arange(self.num_envs, device=self.device)
+            return
 
         if len(envs_id) == 0:
             return
@@ -284,9 +287,14 @@ class RobotConfig(BaseConfiguration):
         all_touching = torch.all(touching > 1, dim=0) if not (None is touching) else False
         all_limits = torch.all(self.limits > 1., dim=0)
 
+        if all_touching:
+            print("All touching")
+
+        if all_limits:
+            print("All hitting limits")
+
         if all_touching or all_limits:
             self.finished.fill_(1)
-            print("Touching or limits")
 
     def _refresh_gym_tensors_(self):
         self.gym.refresh_actor_root_state_tensor(self.sim)
@@ -688,7 +696,10 @@ class RobotConfig(BaseConfiguration):
 
         return obs, obs_expert, closed_simulation
 
-    def step(self, test_data=None, actions=None, position_control=True, iterations_without_control=1):
+    def step(self, test_data=None, actions=None, position_control=True, iterations_without_control=None):
+
+        if iterations_without_control is None:
+            iterations_without_control = self.env_config.iterations_without_control
 
         dones = None
         info = None
@@ -701,7 +712,7 @@ class RobotConfig(BaseConfiguration):
             actions = torch.clip(actions, -self.env_config.clip_actions, self.env_config.clip_actions).to(self.device)
 
         if not closed_simulation:
-            for _ in range(self.env_config.iterations_without_control + 1):
+            for _ in range(iterations_without_control):
                 self.move_dofs(test_data, actions, position_control=position_control)
 
                 # step the physics
@@ -714,7 +725,8 @@ class RobotConfig(BaseConfiguration):
             if not self.env_config.test_joints:
 
                 obs, obs_expert = self.create_observations()
-                dones = self.finished
+                dones = self.finished.detach().clone()
+                self.finished.fill_(0)
                 info = None
 
             if self.save_actions:
