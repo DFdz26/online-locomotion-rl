@@ -353,7 +353,7 @@ class AlgorithmCurrCfg:
 
         boost_kl_distance = 50.
         decay_boost_kl_distance = 0.92
-        n_iterations_learning_from_CPG_RBFN = 60
+        n_iterations_learning_from_CPG_RBFN = 999
 
     class PIBBCfg:
         stop_learning = True
@@ -373,6 +373,7 @@ class AlgorithmCurrCfg:
         start_at_begining = True
         # decay_influence = 0.996
         decay_influence = 0.996
+        iteration_change_rw_indirect = 10
 
     class StoredDistance:
         activate_store_distance = False
@@ -438,15 +439,16 @@ class AlgorithmCurriculum:
         rw_weights = RewardObj.get_rewards()
 
         rw_weights["roll_pitch"]["weight"] *= 2.25
-        rw_weights["yaw_vel"]["weight"] *= 1.5
+        rw_weights["yaw_vel"]["weight"] *= 1.5 * 2
         # rw_weights["x_velocity"]["weight"] /= 1.1
         rw_weights["x_velocity"]["weight"] /= 1.1
         rw_weights["height_error"]["weight"] /= 10.
         # rw_weights["smoothness"]["weight"] *= 2.
-        rw_weights["high_penalization_contacts"]["weight"] *= 2.5
-        rw_weights["velocity_smoothness"]["weight"] *= 2.
-        rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 1210./200.  # 1200
+        rw_weights["high_penalization_contacts"]["weight"] *= 7 * 15 * 10 * 5
+        rw_weights["velocity_smoothness"]["weight"] *= 2. * 0.00001 * 50
+        rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 1210./500.  # 1200
         rw_weights["slippery"]["weight"] = 1.
+        rw_weights["height_error"]["weight"] /= (12 * 3.2)
         # rw_weights["changed_actions"]["weight"] *= 2.5
         #rw_weights["height_error"]["weight"] /= 2
 
@@ -459,11 +461,14 @@ class AlgorithmCurriculum:
         if self.cfg.PIBBCfg.change_RW_scales_when_switching:
             rw_weights = rewardObj.get_rewards()
 
-            rw_weights["yaw_vel"]["weight"] *= 1.5
-            rw_weights["x_velocity"]["weight"] /= 1.5
-            rw_weights["velocity_smoothness"]["weight"] *= 1.2
-            rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 200. 
-            rw_weights["slippery"]["weight"] = 1.
+            rw_weights["yaw_vel"]["weight"] *= 3.2 * 2 * 2 * 3 * 10
+            rw_weights["roll_pitch"]["weight"] *= 1.5 * 5
+            rw_weights["x_velocity"]["weight"] /= (0.05 * 2.5)
+            rw_weights["y_velocity"]["weight"] *= 3
+            rw_weights["velocity_smoothness"]["weight"] *= 1.2 * 1.5
+            rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= -500. 
+            rw_weights["slippery"]["weight"] = 1.1
+            rw_weights["high_penalization_contacts"]["weight"] *= 0.0015
             # rw_weights["z_vel"]["weight"] *= 3
 
             rewardObj.change_rewards(rw_weights)
@@ -483,6 +488,20 @@ class AlgorithmCurriculum:
                                                           boost_noise=boost_noise,
                                                           new_variance=new_variance,
                                                           new_decay=new_decay)
+        
+    def change_rw_for_indirect(self, rewardObj):
+
+        rw_weights = rewardObj.get_rewards()
+
+        rw_weights["yaw_vel"]["weight"] *= 3.2 
+        rw_weights["roll_pitch"]["weight"] *= 6
+        rw_weights["x_velocity"]["weight"] *= 2.5
+        rw_weights["y_velocity"]["weight"] *= 1.2
+
+        # rw_weights["z_vel"]["weight"] *= 3
+
+        rewardObj.change_rewards(rw_weights)
+
 
     def _start_PPO_(self, RewardObj, steps_per_iteration):
         self.PPO_activated = True
@@ -499,6 +518,9 @@ class AlgorithmCurriculum:
     def set_control_parameters(self, iterations, reward, distance, RewardObj, learningObj, steps_per_iteration):
         self.iteration = iterations
 
+        if 0 < self.cfg.PIBBCfg.iteration_change_rw_indirect == iterations and self.switching_CPG_RBFN:
+            self.change_rw_for_indirect(RewardObj)
+        
         if self.start_decrease_CPG and self.cfg.PIBBCfg.decay_influence < 1.:
             self.CPG_influence *= self.cfg.PIBBCfg.decay_influence
 
@@ -558,7 +580,7 @@ class AlgorithmCurriculum:
             encoder_info, amplitude = PPO.get_encoder_info(expert_obs)
 
         if self.PIBB_activated:
-            actions_CPG = PIBB.act(observations, expert_obs, action_mult=1.) * amplitude
+            actions_CPG = PIBB.act(observations, expert_obs, action_mult=2.0) * amplitude
             # rbfn, rbfn_delayed = PIBB.get_rbf_activations()
 
             actions = actions_CPG
