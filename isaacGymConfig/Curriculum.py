@@ -11,6 +11,7 @@ import numpy as np
 import torch
 from typing import NewType
 import math
+import random
 
 from isaacgym import terrain_utils
 from isaacgym import gymapi
@@ -54,12 +55,19 @@ class RandomizationCurrCfg:
         restitution_range = [[0., 0.], [0., 1.0]]
         step_randomization_restitution = 0.1
 
+    class FrequencyControl:
+        randomize_frquency_control = False
+        randomization_range = [3, 5]
+
     class Control:
         randomization_activated = False
         generate_first_randomization = False
 
         increase_range_step = 0
         start_randomization_iteration = 360
+
+        start_randomization_frequency_iteration = 0
+        randomization_frequency_iteration = 4
 
         randomization_interval_iterations = 4
 
@@ -72,6 +80,7 @@ class RandomizationCurriculum:
         self.updates = 0
         self.iteration = 0
         self.level_rand = 0
+        self.randomization_frequency_steps = 0
 
         self.randomization_activated = cfg.Control.randomization_activated
         self.starting_iteration = cfg.Control.start_randomization_iteration
@@ -83,6 +92,7 @@ class RandomizationCurriculum:
 
         self._set_up_ranges()
         self.scales_shift = {}
+        self.new_freq_control = 0
 
     @staticmethod
     def _get_scale_shift_ind(_range):
@@ -300,9 +310,29 @@ class RandomizationCurriculum:
                                                    model_parameters.step_randomization_friction)
         self.level_rand += 1
 
+    def _vary_frequency(self, iterations):
+        if self.cfg.Control.start_randomization_frequency_iteration > iterations:
+            return None
+
+        min_rand = self.cfg.FrequencyControl.randomization_range[0]
+        max_rand = self.cfg.FrequencyControl.randomization_range[1]
+
+        if self.randomization_frequency_steps == 0:
+            self.new_freq_control = random.randint(min_rand, max_rand)
+
+        self.randomization_frequency_steps += 1
+        self.randomization_frequency_steps %= self.cfg.Control.randomization_frequency_iteration
+
+        return self.new_freq_control
+
     def set_control_parameters(self, iterations):
+        new_frequency = None
+
+        if self.cfg.FrequencyControl.randomize_frquency_control:
+            new_frequency = self._vary_frequency(iterations)
+
         if not self.randomization_activated:
-            return False, False
+            return False, False, new_frequency
 
         self.iteration = iterations
         activated = False
@@ -320,9 +350,9 @@ class RandomizationCurriculum:
             self.level_rand = 1
 
         if self.started and self.updates % self.cfg.Control.randomization_interval_iterations == 0:
-            return True, activated
+            return True, activated, new_frequency
 
-        return False, False
+        return False, False, new_frequency
 
 
 class TerrainCurrCfg:
@@ -833,12 +863,14 @@ class Curriculum:
         randomize_properties = False
         randomized_activated = False
         active_reset_envs = False
+        new_frequency = None
 
         if not (self.terrain_curriculum is None):
             self.terrain_curriculum.set_control_parameters(iterations, reward)
 
         if not (self.randomization_curriculum is None):
-            randomize_properties, randomized_activated = self.randomization_curriculum.set_control_parameters(iterations)
+            aux = self.randomization_curriculum.set_control_parameters(iterations)
+            randomize_properties, randomized_activated, new_frequency = aux
 
         if not (self.algorithm_curriculum is None):
             new_steps_per_iteration, active_reset_envs = self.algorithm_curriculum.set_control_parameters(
@@ -848,7 +880,7 @@ class Curriculum:
                 RwObj, AlgObj,
                 new_steps_per_iteration)
 
-        return new_steps_per_iteration, randomize_properties, randomized_activated, active_reset_envs
+        return new_steps_per_iteration, randomize_properties, randomized_activated, active_reset_envs, new_frequency
 
     def get_terrain_curriculum(self, initial_positions):
         if self.terrain_curriculum is None:
