@@ -117,7 +117,9 @@ class CPGRBFN(torchNet):
             config_CPG["COMMAND_SIGNAL_A"],
             config_CPG["COMMAND_SIGNAL_D"],
             config_CPG["EXPECTED_DT"],
-            self.device
+            maximum_vel=0.,
+            environments=self.dimensions,
+            device=self.device
         )
         self.CPG_period = 1/config_CPG["INTRINSIC_FREQUENCY"]
 
@@ -315,34 +317,41 @@ class CPGRBFN(torchNet):
         self.cpg.reset()
         self.mn.reset()
 
-    def _get_rbf_activations_SO2(self, amplitude_change, frequency_change, dt):
+    def _get_rbf_activations_SO2(self, amplitude_change=0.0, frequency_change=1.0, dt=None):
         self.cpg_o = self.cpg()
         self.cpg_history.store_cpg_steps(self.cpg_o)
 
         self.bf = self.rbf(self.cpg_o)
         self.bf_delayed = self.rbf(self.get_cpg_delayed(int(0.5 * self.CPG_period)))
 
-    def _get_rbf_activations_hopf(self, amplitude_change, frequency_change, dt):
+    def _get_rbf_activations_hopf(self, amplitude_change=0.0, frequency_change=1.0, dt=None):
         self.cpg_o = self.cpg(amplitude_change, frequency_change, dt)
 
         self.bf = self.rbf(self.cpg_o)
         self.bf_delayed = self.rbf(-1 * self.cpg_o)
 
-    def forward(self, amplitude_change=0.0, frequency_change=0.0, dt=None, output_mult=1., use_wn=True):
+    def forward(self, amplitude_change=0.0, frequency_change=1.0, dt=None, output_mult=1., use_wn=True):
 
         # update cpg-rbf
-        self.cpg_functions[self.cpg_type](amplitude_change, frequency_change, dt)
-
+        self.cpg_functions[self.cpg_type](amplitude_change=amplitude_change, frequency_change=frequency_change, dt=dt)
         # update motor neurons
         motor1 = self.mn(self.bf, use_wn=use_wn)
         motor2 = self.mn(self.bf_delayed, use_wn=use_wn)
 
         self.__resize_rbfn_to_n_motor(motor1, motor2)
-
         return self.outputs * output_mult
     
     def get_last_rbfn_activations(self):
         return self.bf, self.bf_delayed
+
+    def change_maximum_speed_cpg(self, speed_change, dt=None):
+        if self.cpg_type == 'hopf':
+            speed_change = self.cpg.change_maximum_phase_change(speed_change)
+
+            if dt is not None:
+                self.cpg.change_default_dt(dt)
+
+        return speed_change
 
     @staticmethod
     def HyperParams(n_states, n_in, n_out):
