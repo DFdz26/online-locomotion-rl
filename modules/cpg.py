@@ -63,6 +63,9 @@ class CPG(torchNet):
 
     def get_past_output(self):
         return self.prev_out
+    
+    def get_cpg_dt(self):
+        return None
 
     def forward(self):
         self.prev_out = self.__cpg.detach().clone()

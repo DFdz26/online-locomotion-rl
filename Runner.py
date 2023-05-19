@@ -139,8 +139,12 @@ class Runner:
                 self.agents.get_record_robot()
 
             for step in range(steps_per_iteration):
+                dt = new_frequency
 
-                actions, ppo_rw = self.learning_algorithm.act(self.obs, self.obs_exp, self.prev_obs)
+                if dt is not None:
+                    dt = (dt/4)*self.learning_algorithm.get_dt_cpgs()
+
+                actions, ppo_rw = self.learning_algorithm.act(self.obs, self.obs_exp, self.prev_obs, dt=dt)
 
                 self.obs, self.obs_exp, actions, reward, \
                     dones, info, closed_simulation = self.agents.step(None, actions,

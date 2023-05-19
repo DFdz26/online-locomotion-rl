@@ -37,9 +37,9 @@ class HopfOscillators(torchNet):
         self.maximum_command_phase = 1
         self.minimum_command_phase = -1
 
-        self.maximum_phase_change = 20.
+        self.maximum_phase_change = 0.
         self.stop_phase_change = -6.2832
-        self.minimum_phase_change = -30.
+        self.minimum_phase_change = -12.
 
         self.positive_range_change_phase = self.maximum_phase_change - self.stop_phase_change
         self.negative_range_change_phase = self.stop_phase_change - self.minimum_phase_change
@@ -62,6 +62,9 @@ class HopfOscillators(torchNet):
 
     def change_default_dt(self, dt):
         self.expected_dt = dt
+
+    def get_cpg_dt(self):
+        return self.expected_dt
 
     def convert_phase_command(self, command):
 
@@ -100,8 +103,8 @@ class HopfOscillators(torchNet):
 
         self._get_new_phase(dt, phase_shift)
         self._get_new_amplitude(dt, modification_amplitude)
-        self.output[:, 0] = self.amplitude * torch.cos(self.phase)
-        self.output[:, 1] = self.amplitude * torch.sin(self.phase)
+        self.output[:, 0] = self.amplitude * torch.sin(self.phase)
+        self.output[:, 1] = self.amplitude * torch.cos(self.phase)
 
         return self.output
 

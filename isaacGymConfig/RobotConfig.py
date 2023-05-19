@@ -160,10 +160,10 @@ class RobotConfig(BaseConfiguration):
     def stop_record_robot(self):
         self.save_actions = False
 
-        with open("record_observations_1.pickle", "wb") as f:
+        with open("record_observations_1_2.pickle", "wb") as f:
             pickle.dump(self.saved_observation, f)
 
-        with open("record_actions_1.pickle", "wb") as f:
+        with open("record_actions_1_2.pickle", "wb") as f:
             pickle.dump(self.saved_actions, f)
 
         self.saved_actions = []
@@ -778,14 +778,30 @@ class RobotConfig(BaseConfiguration):
         #     dim=-1
         # )
 
-        obs = torch.cat((
-            self.projected_gravity,
-            (self.dof_pos - self.default_dof_pos),
-            self.dof_vel * 0.05,
-            self.base_ang_vel * 0.25,
-            self.actions),
-            dim=-1
-        )
+        if self.env_config.cfg_observations.NoiseObservation.enable_noise:
+            noise_imu = torch.randn(self.projected_gravity.size()).to(self.device) * self.env_config.cfg_observations.NoiseObservation.noise[0]
+            noise_position = torch.randn(self.dof_pos.size()).to(self.device) * self.env_config.cfg_observations.NoiseObservation.noise[1]
+            noise_vel = torch.randn(self.dof_vel.size()).to(self.device) * self.env_config.cfg_observations.NoiseObservation.noise[2]
+            noise_gyro = torch.randn(self.base_ang_vel.size()).to(self.device) * self.env_config.cfg_observations.NoiseObservation.noise[3]
+            noise_actions = torch.randn(self.actions.size()).to(self.device) * self.env_config.cfg_observations.NoiseObservation.noise[4]
+
+            obs = torch.cat((
+                self.projected_gravity + noise_imu,
+                (self.dof_pos - self.default_dof_pos) + noise_position,
+                (self.dof_vel + noise_vel) * 0.05,
+                (self.base_ang_vel + noise_gyro) * 0.25,
+                self.actions + noise_actions),
+                dim=-1
+            )
+        else:
+            obs = torch.cat((
+                self.projected_gravity,
+                (self.dof_pos - self.default_dof_pos),
+                (self.dof_vel) * 0.05,
+                (self.base_ang_vel) * 0.25,
+                self.actions),
+                dim=-1
+            )
 
         obs = torch.clip(obs, -self.env_config.clip_observations, self.env_config.clip_observations)
 

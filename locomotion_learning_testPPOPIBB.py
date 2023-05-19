@@ -28,7 +28,8 @@ from isaacGymConfig.Curriculum import Curriculum, TerrainCurrCfg, AlgorithmCurrC
 
 # config_file = "models/configs/config_minicheeta.json"
 # graph_name = "graph_minicheeta_learning"
-cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_04_2023__22_07_23/300.pickle"
+# cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_04_2023__22_07_23/300.pickle"
+cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/b1/2023_05_14.00_13_58/300.pickle"
 
 config_file = "models/configs/config_b1.json"
 graph_name = "graph_b1_learning"
@@ -53,13 +54,15 @@ rollouts = 1250
 iterations_without_control = 4
 num_env_colums = 100
 # learning_rate_PPO = 0.0000003  # 0.0000003
-start_PPO_acting_iteration = 150
+start_PPO_acting_iteration = 300
 num_mini_batches = 2100
 num_prev_obs = 15
 device = "cuda:0"
 show_PPO_graph = True
 
 intrinsic_frequency_cpg = 7.5
+changing_direct_iteration = 41
+
 
 if RECOVER_CPG:
     start_PPO_acting_iteration = 1
@@ -106,7 +109,7 @@ def config_learning_curriculum():
 
     if CURRICULUM_CPG_RBFN and not RECOVER_CPG:
         algCfg.PIBBCfg.switching_indirect_to_direct = True
-        algCfg.PIBBCfg.threshold_switching = 70
+        algCfg.PIBBCfg.threshold_switching = changing_direct_iteration
         algCfg.PIBBCfg.decay_at_switching = 0.995
         algCfg.PIBBCfg.variance_at_switching = 0.009
         algCfg.PIBBCfg.boost_first_switching_noise = 1.
@@ -130,10 +133,16 @@ def config_randomization_curriculum():
     randCurrCfg.ModelParameters.randomize_restitution = True
     randCurrCfg.ModelParameters.step_randomization_restitution = 0.
 
+    randCurrCfg.FrequencyControl.randomization_range = [iterations_without_control - 1,
+                                                        iterations_without_control + 1]
+    randCurrCfg.FrequencyControl.randomize_frquency_control = False
+
     randCurrCfg.Control.randomization_activated = True
     randCurrCfg.Control.generate_first_randomization = True
-    randCurrCfg.Control.start_randomization_iteration = start_PPO_acting_iteration
+    randCurrCfg.Control.start_randomization_iteration = 50
     randCurrCfg.Control.randomization_interval_iterations = 3
+    randCurrCfg.Control.randomization_frequency_iteration = 4
+    randCurrCfg.Control.start_randomization_frequency_iteration = changing_direct_iteration
 
     return randCurrCfg
 
@@ -221,13 +230,13 @@ def config_terrain(env_config):
 
         curriculum_terr.object = terrain_obj
         delay = 0
-        first_curr = start_PPO_acting_iteration + 70 + delay
-        second_curr = start_PPO_acting_iteration + 120 + delay
-        third_curr = start_PPO_acting_iteration + 180 + delay
-        fourth_curr = start_PPO_acting_iteration + 240 + delay  # 700
-        fifth_curr = start_PPO_acting_iteration + 360 + delay  # 1750
-        six_curr = start_PPO_acting_iteration + 470 + delay  # 1750
-        seventh_curr = start_PPO_acting_iteration + 600 + delay  # 1750
+        first_curr = start_PPO_acting_iteration + 70 + delay -20
+        second_curr = start_PPO_acting_iteration + 120 + delay - 20
+        third_curr = start_PPO_acting_iteration + 180 + delay -40
+        fourth_curr = start_PPO_acting_iteration + 240 + delay - 60 # 700
+        fifth_curr = start_PPO_acting_iteration + 360 + delay -80  # 1750
+        six_curr = start_PPO_acting_iteration + 470 + delay -100 # 1750
+        seventh_curr = start_PPO_acting_iteration + 600 + delay -120 # 1750
         eight_curr = start_PPO_acting_iteration + 700 + delay  # 1750
         curriculum_terr.Control.threshold = {
             first_curr: False,
@@ -260,18 +269,20 @@ def config_env():
     env_config.cfg_observations.enable_observe_restitution = False
     env_config.cfg_observations.enable_observe_motor_strength = True
     env_config.cfg_observations.enable_observe_payload = True
+    env_config.cfg_observations.NoiseObservation.enable_noise = True
+    
 
 
 reward_list = {
     "x_distance": {
-        "weight": 2.2 * 1,
+        "weight": 2.2 * 1 * 1.1,
         "reward_data": {
             "absolute_distance": False
         }
     },
 
     "y_distance": {
-        "weight": -0.06 * 3.,
+        "weight": -0.06 * 3. * 1.2 * 3,
         "reward_data": {
             "absolute_distance": True
         }
@@ -304,17 +315,29 @@ reward_list = {
     },
 
     "height_error": {
-        "weight": -2.9 * 1.2 * 6,
+        "weight": -2.9 * 1.2 * 6 * 3 * 12 * 1.5,
         "reward_data": {
             "max_clip": 2.5,
         }
     },
 
+    "low_penalization_contacts": {
+        "weight": -0.25 * 1.5,
+        "reward_data": {
+            "absolute_distance": True,
+            "max_clip": 2.5,
+            "weights": {
+                "correction_state": 0.02,
+                "distance": 0.5,
+            }
+        }
+    },
+
     "slippery": {
-        "weight": 0.,
+        "weight": 0.3,
         "reward_data": {
             # "slippery_coef": -0.0088,
-            "slippery_coef": -0.007,
+            "slippery_coef": -0.9,
         }
     },
 
@@ -326,7 +349,7 @@ reward_list = {
     # },
 
     "z_vel": {
-        "weight": 0.1 * 10. * 4.2,
+        "weight": 0.1 * 10. * 4.2 * 1.5 * 1.2,
         "reward_data": {
             "exponential": False,
             "weight": -0.24
@@ -334,7 +357,7 @@ reward_list = {
     },
 
     "roll_pitch": {
-        "weight": 0.077 * 1.2 * 2.7,
+        "weight": 0.077 * 1.2 * 2.7 * 2.5 * 4 * 1.5,
         "reward_data": {
             "exponential": False,
             "weight": -0.15
@@ -342,7 +365,7 @@ reward_list = {
     },
 
     "yaw_vel": {
-        "weight": 0.028 * 1.1 * 1.5,
+        "weight": 0.028 * 1.1 * 1.5 * 1.5 * 1,
         "reward_data": {
             "exponential": False,
             "weight": -0.1,
@@ -351,7 +374,7 @@ reward_list = {
     },
 
     "y_velocity": {
-        "weight": 0.1 * 1.6,
+        "weight": 0.1 * 1.6 * 3,
         "reward_data": {
             "exponential": False,
             "weight": -0.075  # 0.05
@@ -359,7 +382,7 @@ reward_list = {
     },
 
     "x_velocity": {
-        "weight": 1. * 2 * 1.8 * 2.1 * 1.7,  # 3.8
+        "weight": 1. * 2 * 1.8 * 2.1 * 1.7 * 1.05,  # 3.8
         "reward_data": {
             "exponential": False,
             "weight": 0.178  # 0.177
@@ -385,7 +408,7 @@ reward_list = {
     },
 
     "ppo_penalization": {
-        "weight": -0.001,
+        "weight": -7.,
     }
 
     # "vel_cont": {
@@ -416,8 +439,10 @@ if RECOVER_CPG:
     variance = 0.003
     noise_boost = 0.9
 elif CURRICULUM_CPG_RBFN:
-    decay = 0.997
+    decay = 0.992
     variance = 0.027
+    # variance = 0.009
+    # variance = 0.021
     noise_boost = 1.5
 else:
     variance = 0.027
@@ -449,7 +474,7 @@ hyperparam = {
     "MOTORS_LEG": 3,
     "NLEG": 4,
     "TINIT": 1000,
-    "ENCODING": encoding
+    "ENCODING": encoding,
 }
 
 # cpg_param = {
@@ -487,7 +512,8 @@ config = {
     "HYPERPARAM": hyperparam,
     "RBF": rbf_param,
     "CPG": cpg_param,
-    "UTILS": cpg_utils
+    "UTILS": cpg_utils,
+    "deactivate_hip": True
 }
 
 cpg_rbf_nn = CPGRBFN(config, dimensions=rollouts, load_cache=LOAD_CACHE)

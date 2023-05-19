@@ -88,7 +88,7 @@ class CPGRBFN(torchNet):
 
         # RBF
         self.rbf = RBF(self.cpg, self.__n_state, sigma=float(config['RBF']['SIGMA']), tinit=self.__t_init,
-                       device=self.device)
+                       device=self.device, hopf=config["CPG"]["TYPE"]=="hopf")
 
         # Motor Network
         self.mn = MN(self.__hyperparams, outputgain=self.mn_gain, device=self.device, dimensions=dimensions,
@@ -98,6 +98,8 @@ class CPGRBFN(torchNet):
         # ---------------------- initialize neuron activity ------------------------
         self.inputs = self.zeros(1, self.__n_in)
         self.outputs = self.zeros(dimensions, self.__n_motors)
+        self.internal_cpg_dt = None
+        self.deactivate_hip = config["deactivate_hip"]
 
         # initialize cpg activity
         self.reset()
@@ -310,6 +312,9 @@ class CPGRBFN(torchNet):
 
     def get_cpg_output(self):
         return self.cpg_o
+    
+    def get_cpg_dt(self):
+        return self.cpg.get_cpg_dt()
 
     # ---------------------- update   ------------------------
     def reset(self):
@@ -324,13 +329,13 @@ class CPGRBFN(torchNet):
         self.bf = self.rbf(self.cpg_o)
         self.bf_delayed = self.rbf(self.get_cpg_delayed(int(0.5 * self.CPG_period)))
 
-    def _get_rbf_activations_hopf(self, amplitude_change=0.0, frequency_change=1.0, dt=None):
+    def _get_rbf_activations_hopf(self, amplitude_change=0.0, frequency_change=None, dt=None):
         self.cpg_o = self.cpg(amplitude_change, frequency_change, dt)
 
         self.bf = self.rbf(self.cpg_o)
         self.bf_delayed = self.rbf(-1 * self.cpg_o)
 
-    def forward(self, amplitude_change=0.0, frequency_change=1.0, dt=None, output_mult=1., use_wn=True):
+    def forward(self, amplitude_change=0.0, frequency_change=None, dt=None, output_mult=1., use_wn=True):
 
         # update cpg-rbf
         self.cpg_functions[self.cpg_type](amplitude_change=amplitude_change, frequency_change=frequency_change, dt=dt)
@@ -339,6 +344,10 @@ class CPGRBFN(torchNet):
         motor2 = self.mn(self.bf_delayed, use_wn=use_wn)
 
         self.__resize_rbfn_to_n_motor(motor1, motor2)
+        
+        if self.deactivate_hip:
+            self.outputs[:, [0, 3, 7, 11]] = 0.
+            
         return self.outputs * output_mult
     
     def get_last_rbfn_activations(self):

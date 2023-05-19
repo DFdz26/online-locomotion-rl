@@ -81,6 +81,7 @@ class MN(torchNet):
 
         self.Wn = torch.zeros((dimensions, self.__n_state + self.__n_bias, self.__n_out), device=self.device)
         self.Wn = torch.add(self.W, self.Wn)
+        self.use_so2 = False
 
         self.reset()
 
@@ -150,10 +151,17 @@ class MN(torchNet):
             x1 = torch.cat([x, torch.ones(shape).to(self.device)], dim=-1)
         else:
             x1 = x
-
+        
         if use_wn:
-            outputs = 1 * torch.tanh((x1 @ self.Wn)).reshape(self.dimensions, self.__n_out)
+            outputs = 1 * torch.tanh((x1 @ self.Wn))
         else:
-            outputs = 1 * torch.tanh((x1 @ self.W)).reshape(self.dimensions, self.__n_out)
+            outputs = 1 * torch.tanh((x1 @ self.W))
+
+        if not self.use_so2:
+            outputs = outputs[:, 0, :]
+
+        outputs = outputs.reshape(self.dimensions, self.__n_out)
+        # else:
+        #     outputs = torch.transpose(outputs, 0, -1)
 
         return outputs

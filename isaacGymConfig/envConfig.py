@@ -17,6 +17,20 @@ class Observations:
     enable_observe_motor_strength = True
     enable_observe_payload = True
 
+    class NoiseObservation:
+#         Noise for gyroscope = std dev 0.02
+# for imu std dev 0.003
+# for position std dev 0.006
+# for velocity std dev 0.02
+        enable_noise = False
+        noise = [
+            0.003,
+            0.006,
+            0.02,
+            0.02,
+            0.003
+        ]
+
 
 class Sensors:
     class Activations:
@@ -36,6 +50,8 @@ class Sensors:
         n_camera = 1
         height = 480
         width = 640
+
+    
 
 
 class EnvConfig:

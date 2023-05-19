@@ -11,7 +11,6 @@ import numpy as np
 import torch
 from typing import NewType
 import math
-import random
 
 from isaacgym import terrain_utils
 from isaacgym import gymapi
@@ -55,19 +54,12 @@ class RandomizationCurrCfg:
         restitution_range = [[0., 0.], [0., 1.0]]
         step_randomization_restitution = 0.1
 
-    class FrequencyControl:
-        randomize_frquency_control = False
-        randomization_range = [3, 5]
-
     class Control:
         randomization_activated = False
         generate_first_randomization = False
 
         increase_range_step = 0
         start_randomization_iteration = 360
-
-        start_randomization_frequency_iteration = 0
-        randomization_frequency_iteration = 4
 
         randomization_interval_iterations = 4
 
@@ -80,7 +72,6 @@ class RandomizationCurriculum:
         self.updates = 0
         self.iteration = 0
         self.level_rand = 0
-        self.randomization_frequency_steps = 0
 
         self.randomization_activated = cfg.Control.randomization_activated
         self.starting_iteration = cfg.Control.start_randomization_iteration
@@ -92,7 +83,6 @@ class RandomizationCurriculum:
 
         self._set_up_ranges()
         self.scales_shift = {}
-        self.new_freq_control = 0
 
     @staticmethod
     def _get_scale_shift_ind(_range):
@@ -310,29 +300,9 @@ class RandomizationCurriculum:
                                                    model_parameters.step_randomization_friction)
         self.level_rand += 1
 
-    def _vary_frequency(self, iterations):
-        if self.cfg.Control.start_randomization_frequency_iteration > iterations:
-            return None
-
-        min_rand = self.cfg.FrequencyControl.randomization_range[0]
-        max_rand = self.cfg.FrequencyControl.randomization_range[1]
-
-        if self.randomization_frequency_steps == 0:
-            self.new_freq_control = random.randint(min_rand, max_rand)
-
-        self.randomization_frequency_steps += 1
-        self.randomization_frequency_steps %= self.cfg.Control.randomization_frequency_iteration
-
-        return self.new_freq_control
-
     def set_control_parameters(self, iterations):
-        new_frequency = None
-
-        if self.cfg.FrequencyControl.randomize_frquency_control:
-            new_frequency = self._vary_frequency(iterations)
-
         if not self.randomization_activated:
-            return False, False, new_frequency
+            return False, False
 
         self.iteration = iterations
         activated = False
@@ -350,9 +320,9 @@ class RandomizationCurriculum:
             self.level_rand = 1
 
         if self.started and self.updates % self.cfg.Control.randomization_interval_iterations == 0:
-            return True, activated, new_frequency
+            return True, activated
 
-        return False, False, new_frequency
+        return False, False
 
 
 class TerrainCurrCfg:
@@ -383,7 +353,7 @@ class AlgorithmCurrCfg:
 
         boost_kl_distance = 50.
         decay_boost_kl_distance = 0.92
-        n_iterations_learning_from_CPG_RBFN = 50
+        n_iterations_learning_from_CPG_RBFN = 999
 
     class PIBBCfg:
         stop_learning = True
@@ -474,7 +444,7 @@ class AlgorithmCurriculum:
         rw_weights["x_velocity"]["weight"] /= 1.1
         rw_weights["height_error"]["weight"] /= 10.
         # rw_weights["smoothness"]["weight"] *= 2.
-        rw_weights["high_penalization_contacts"]["weight"] *= 7 * 15 * 10 * 5 * 1.5
+        rw_weights["high_penalization_contacts"]["weight"] *= 7 * 15 * 10 * 5
         rw_weights["velocity_smoothness"]["weight"] *= 2. * 0.00001 * 50
         rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 1210./500.  # 1200
         rw_weights["slippery"]["weight"] = 1.
@@ -491,10 +461,10 @@ class AlgorithmCurriculum:
         if self.cfg.PIBBCfg.change_RW_scales_when_switching:
             rw_weights = rewardObj.get_rewards()
 
-            rw_weights["yaw_vel"]["weight"] *= 3.2 * 2 * 2 * 3 * 10 * 5
-            rw_weights["roll_pitch"]["weight"] *= 1.5 * 5 
-            rw_weights["x_velocity"]["weight"] /= (0.05 *  5.5)
-            rw_weights["y_velocity"]["weight"] *= 3 * 3
+            rw_weights["yaw_vel"]["weight"] *= 3.2 * 2 * 2 * 3 * 10
+            rw_weights["roll_pitch"]["weight"] *= 1.5 * 5
+            rw_weights["x_velocity"]["weight"] /= (0.05 * 2.5)
+            rw_weights["y_velocity"]["weight"] *= 3
             rw_weights["velocity_smoothness"]["weight"] *= 1.2 * 1.5
             rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= -500. 
             rw_weights["slippery"]["weight"] = 1.1
@@ -524,15 +494,9 @@ class AlgorithmCurriculum:
         rw_weights = rewardObj.get_rewards()
 
         rw_weights["yaw_vel"]["weight"] *= 3.2 
-        rw_weights["height_error"]["weight"] *= 1.5
-        rw_weights["roll_pitch"]["weight"] *= 6 * 3
-        rw_weights["x_velocity"]["weight"] *= 2.5 * 1.3 * 2 * 1.3
+        rw_weights["roll_pitch"]["weight"] *= 6
+        rw_weights["x_velocity"]["weight"] *= 2.5
         rw_weights["y_velocity"]["weight"] *= 1.2
-        rw_weights["slippery"]["reward_data"]["slippery_coef"] *= 1.8 * 2
-        rw_weights["high_penalization_contacts"]["weight"] *= 3
-        rw_weights["z_vel"]["weight"] *= 3
-
-        
 
         # rw_weights["z_vel"]["weight"] *= 3
 
@@ -606,7 +570,7 @@ class AlgorithmCurriculum:
             error_ppo = torch.norm(PPO_act - PIBB_act)
             return error_ppo
 
-    def get_curriculum_action(self, PPO, PIBB, observations, expert_obs, previous_obs, change_frequency=None, dt=None):
+    def get_curriculum_action(self, PPO, PIBB, observations, expert_obs, previous_obs):
         actions = None
         actions_CPG = None
         amplitude = 1.
@@ -616,7 +580,7 @@ class AlgorithmCurriculum:
             encoder_info, amplitude = PPO.get_encoder_info(expert_obs)
 
         if self.PIBB_activated:
-            actions_CPG = PIBB.act(observations, expert_obs, action_mult=2.0, phase_shift=change_frequency, dt=dt) * amplitude
+            actions_CPG = PIBB.act(observations, expert_obs, action_mult=2.0) * amplitude
             # rbfn, rbfn_delayed = PIBB.get_rbf_activations()
 
             actions = actions_CPG
@@ -635,7 +599,7 @@ class AlgorithmCurriculum:
             if actions is None:
                 actions = actions_PPO * self.gamma
             else:
-                actions = self.CPG_influence * actions + (1 - self.CPG_influence) * actions_PPO
+                actions = self.CPG_influence * actions + (1 -self.CPG_influence) * actions_PPO
 
         elif self.learning_actor_from_cpg:
             PPO.save_data_teacher_student_actor(observations, expert_obs, actions_CPG)
@@ -643,10 +607,6 @@ class AlgorithmCurriculum:
         self.gamma = (1 - self.CPG_influence)
 
         return actions, rw_ppo_diff_cpg
-
-    @staticmethod
-    def change_maximum_change_cpg(PIBB, maximum_freq, dt=None):
-        PIBB.change_max_frequency_cpg(maximum_freq, dt)
 
     def update_curriculum_learning(self, policy, rewards, PPO, PIBB):
         information_Actor_critic = None
@@ -851,9 +811,9 @@ class Curriculum:
         if not (self.algorithm_curriculum is None):
             self.algorithm_curriculum.last_step_learning(obs, exp_obs, PIBB, PPO)
 
-    def act_curriculum(self, observation, expert_obs, prev_obs, PPO, PIBB, change_frequency=None, dt=None):
+    def act_curriculum(self, observation, expert_obs, prev_obs, PPO, PIBB):
         if not (self.algorithm_curriculum is None):
-            return self.algorithm_curriculum.get_curriculum_action(PPO, PIBB, observation, expert_obs, prev_obs, change_frequency=change_frequency, dt=dt)
+            return self.algorithm_curriculum.get_curriculum_action(PPO, PIBB, observation, expert_obs, prev_obs)
 
         return None
 
@@ -891,14 +851,12 @@ class Curriculum:
         randomize_properties = False
         randomized_activated = False
         active_reset_envs = False
-        new_frequency = None
 
         if not (self.terrain_curriculum is None):
             self.terrain_curriculum.set_control_parameters(iterations, reward)
 
         if not (self.randomization_curriculum is None):
-            aux = self.randomization_curriculum.set_control_parameters(iterations)
-            randomize_properties, randomized_activated, new_frequency = aux
+            randomize_properties, randomized_activated = self.randomization_curriculum.set_control_parameters(iterations)
 
         if not (self.algorithm_curriculum is None):
             new_steps_per_iteration, active_reset_envs = self.algorithm_curriculum.set_control_parameters(
@@ -908,7 +866,7 @@ class Curriculum:
                 RwObj, AlgObj,
                 new_steps_per_iteration)
 
-        return new_steps_per_iteration, randomize_properties, randomized_activated, active_reset_envs, new_frequency
+        return new_steps_per_iteration, randomize_properties, randomized_activated, active_reset_envs
 
     def get_terrain_curriculum(self, initial_positions):
         if self.terrain_curriculum is None:

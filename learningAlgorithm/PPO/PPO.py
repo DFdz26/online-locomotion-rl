@@ -22,7 +22,7 @@ class PPOArgs:
     # value_loss_coef = 300.  # 1500
     # value_loss_coef = 1.  # 1500
     # value_loss_coef = 0.05  # 1500
-    value_loss_coef = 0.025  # 1500
+    value_loss_coef = 0.025  / (1000000000 * 25)# 1500
     clip_param = 0.2
     entropy_coef = 0.005
     num_learning_epochs = 2  # 5

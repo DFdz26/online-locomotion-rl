@@ -213,16 +213,19 @@ class PPO_PIBB:
         if not closed_simulation:
             self.curricula.post_step_simulation(obs, exp_obs, actions, reward, dones, info, self.PPO, self.PIBB)
 
+    def get_dt_cpgs(self):
+        return self.PIBB.get_cpg_dt()
+
     def last_step(self, obs, exp_obs):
         self.curricula.last_step(obs, exp_obs, self.PPO, self.PIBB)
 
     def get_noise(self):
         return self.PIBB.get_noise()
 
-    def act(self, observation, expert_obs, history_obs, frequency_change=1.0):
+    def act(self, observation, expert_obs, history_obs, frequency_change=None, dt=None):
         if self.test:
             PPO_actions = self.PPO.act(observation, expert_obs, history_obs)
-            PIBB_actions = self.PIBB.act(observation, expert_obs, phase_shift=frequency_change)
+            PIBB_actions = self.PIBB.act(observation, expert_obs, phase_shift=frequency_change, dt=dt)
             self.gamma_PPO = 0.5
 
             return 0.5 * PIBB_actions + self.gamma_PPO * PPO_actions
@@ -230,7 +233,7 @@ class PPO_PIBB:
             # return self.learnt_weight["PPO"]* PPO_actions 
         else:
             action, rw_ppo_diff_cpg = self.curricula.act_curriculum(observation, expert_obs, history_obs, self.PPO,
-                                                                    self.PIBB, change_frequency=frequency_change)
+                                                                    self.PIBB, change_frequency=frequency_change, dt=dt)
             self.gamma_PPO = self.curricula.algorithm_curriculum.gamma
 
             return action, rw_ppo_diff_cpg

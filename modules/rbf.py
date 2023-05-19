@@ -84,12 +84,14 @@ class RBF(torchNet):
         self.__centers = centers
 
     def forward(self, x):
-        rbf = torch.unsqueeze(torch.exp(
-            -(torch.pow(x[:, 0].reshape(-1,1) - self.__centers[0], 2) + torch.pow(x[:, 1].reshape(-1,1) - self.__centers[1], 2)) / self.__sigma), 1)
 
         if self.hopf:
+            rbf = torch.unsqueeze(torch.exp(
+                -(torch.pow(x[:, 0].reshape(-1,1) - self.__centers[0], 2) + torch.pow(x[:, 1].reshape(-1,1) - self.__centers[1], 2)) / self.__sigma), 1)
             rbf = rbf.flatten(0, 1)
         else:
+            rbf = torch.unsqueeze(torch.exp(
+            -(torch.pow(x[0] - self.__centers[0], 2) + torch.pow(x[1] - self.__centers[1], 2)) / self.__sigma), 1)
             rbf = rbf.t()
 
         return rbf

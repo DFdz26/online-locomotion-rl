@@ -160,3 +160,6 @@ class PIBB(object):
 
     def change_max_frequency_cpg(self, new_max, dt=None):
         self.policy.change_maximum_speed_cpg(new_max, dt)
+
+    def get_cpg_dt(self):
+        return self.policy.get_cpg_dt()
