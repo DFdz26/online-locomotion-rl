@@ -188,8 +188,10 @@ def continue_run(sim):
         torque_hip.config(text=f"{float(sim.torques[0, 0])}")
         torque_knee.config(text=f"{float(sim.torques[0, 1])}")
         torque_ankle.config(text=f"{float(sim.torques[0, 2])}")
+        # obs, obs_expert, self.actions, self.reward, dones, info, closed_simulation
 
-        sim.step(test_data=env_config.test_config, actions=None, position_control=True)
+        obs, _, _, _, _, _, _ =sim.step(test_data=env_config.test_config, actions=None, position_control=True)
+        print(sim.projected_gravity[:3])
 
         error_hip.config(text=f"{float(sim.controller_error[0, 0])}")
         error_knee.config(text=f"{float(sim.controller_error[0, 1])}")
@@ -224,4 +226,20 @@ print(f"driveMode: {robot.dof_prop_assets['driveMode']}")
 print(f"stiffness: {robot.dof_prop_assets['stiffness']}")
 print(f"damping: {robot.dof_prop_assets['damping']}")
 print("=======================")
+env_ids = torch.arange(robot.num_envs, device=robot.device)
+robot.root_states[env_ids, 3] = 0.8
+
+
+# if self.start_random_vel:
+#     self.root_states[env_ids, 7:13] = torch_rand_float(-0.5, 0.5, (len(env_ids), 6), device=self.device)
+
+a = [0., 0., 0., 1]
+a = [0.2231064, 0., 0., 0.9747941]
+robot.root_states[env_ids, 3:7] = torch.FloatTensor(a).to(robot.device)
+env_ids_int32 = env_ids.to(dtype=torch.int32)
+robot.gym.set_actor_root_state_tensor_indexed(robot.sim,
+                                                gymtorch.unwrap_tensor(robot.root_states),
+                                                gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
+
+
 continue_run(robot)

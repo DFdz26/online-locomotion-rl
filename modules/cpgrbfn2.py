@@ -344,9 +344,9 @@ class CPGRBFN(torchNet):
         motor2 = self.mn(self.bf_delayed, use_wn=use_wn)
 
         self.__resize_rbfn_to_n_motor(motor1, motor2)
-        
+
         if self.deactivate_hip:
-            self.outputs[:, [0, 3, 7, 11]] = 0.
+            self.outputs[:, [0, 3, 6, 9]] = 0.
             
         return self.outputs * output_mult
     

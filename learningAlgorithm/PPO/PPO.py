@@ -22,10 +22,15 @@ class PPOArgs:
     # value_loss_coef = 300.  # 1500
     # value_loss_coef = 1.  # 1500
     # value_loss_coef = 0.05  # 1500
-    value_loss_coef = 0.025  / (1000000000 * 25)# 1500
+    value_loss_coef = 0.025  / (10000000000 * 20 * 10 * 20 * 1.5 * 100 * 1.5 * 50 * 1.5)# 1500
+    value_loss_coef = 0.025  / (1.e11 * 4)# 1500
+    value_loss_coef = 0.5 / (2.e8 )
+    value_loss_coef = 0.5 
     clip_param = 0.2
-    entropy_coef = 0.005
+    entropy_coef = 0.006
+    entropy_coef = 0.01
     num_learning_epochs = 2  # 5
+    num_learning_epochs = 3  # 5
     # num_mini_batches = 1400  # mini batch size = num_envs*nsteps / nminibatches 400
     num_mini_batches = 3000  # mini batch size = num_envs*nsteps / nminibatches 400
     # num_mini_batches = 400  # mini batch size = num_envs*nsteps / nminibatches
@@ -46,6 +51,7 @@ class PPOArgs:
     max_grad_norm = 1.
 
     max_clipped_learning_rate = 1.e-2
+    max_clipped_learning_rate = 1.e-3
     # max_clipped_learning_rate = 0.00019
     # # max_clipped_learning_rate = 1.e-2
     # # min_clipped_learning_rate = 5.e-6
@@ -79,6 +85,7 @@ class PPO:
         self.expert = False
         self.store_primitive_movement = store_primitive_movement
         self.activated_learning_from_cpg_rbfn = False
+        self.actual_lr_learn_cpg = cfg.learning_rate_cpg_rbfn * 1
 
         # PPO components
         self.actor_critic = actor_critic
@@ -181,7 +188,12 @@ class PPO:
 
             mean_loss += float(loss_)
 
-            self.optimizer.zero_grad()
+            for param_group in self.optimizer_learn_from_cpg.param_groups:
+                param_group['lr'] = self.actual_lr_learn_cpg
+
+            self.actual_lr_learn_cpg *= 0.95
+
+            self.optimizer_learn_from_cpg.zero_grad()
             loss_.backward()
             nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.cfg.max_grad_norm)
             self.optimizer_learn_from_cpg.step()
@@ -235,7 +247,7 @@ class PPO:
         if self.verbose:
             print(f"Done.")
 
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=self.cfg.learning_rate)
+        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=self.cfg.learning_rate_teacher_cpg)
 
     def last_step(self, last_critic_obs, exp_obs, primitive_movement_batch):
         last_values = self.actor_critic.evaluate(last_critic_obs, exp_obs, primitive_movement_batch).detach()
@@ -331,6 +343,7 @@ class PPO:
                 value_loss = (returns_batch - value_batch).pow(2).mean()
 
             loss = surrogate_loss + self.cfg.value_loss_coef * value_loss - self.cfg.entropy_coef * entropy_batch.mean()
+            # loss += float(F.mse_loss(new_actions, primitive_movement_batch))
 
             difference_cpg_loss = 0.
 

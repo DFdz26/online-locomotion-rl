@@ -11,9 +11,10 @@
     "penalization_contacts_on": ["calf"],
     "foot_contacts_on": "foot",
     "goal_height": 0.55,
+    "mass": 56,
     "initial_postion": {
-      "y": 0.0,
-      "x": 0.0,
+      "y": -700.0,
+      "x": 10.0,
       "z": 0.58
     },
     "torque_limits": [
@@ -56,12 +57,12 @@
       "Kp": {
         "hip_joint": 720.0,
         "thigh_joint": 420.0,
-        "calf_joint": 420.0
+        "calf_joint": 620.0
       },
        "Kd": {
         "hip_joint": 16.5,
-        "thigh_joint": 14.5,
-        "calf_joint": 4.5
+        "thigh_joint": 17.5,
+        "calf_joint": 14.5
       }
     }
   }

@@ -16,7 +16,7 @@ from .Rewards import termination_contact_indices_keyword, penalization_contact_i
 from .Rewards import foot_contact_indices_keyword, joint_velocity_keyword, foot_velocity_keyword
 from .Rewards import base_lin_vel_keyboard, base_ang_vel_keyboard, base_previous_lin_vel_keyboard
 from .Rewards import previous_actions_keyword, current_actions_keyword, joint_acceleration_keyword
-from .Rewards import count_limit_vel_keyword, count_joint_limits_keyword, offset_keyword
+from .Rewards import count_limit_vel_keyword, count_joint_limits_keyword, offset_keyword, current_torques_keyword
 import pickle
 
 default_pos = [0.5, 0.32, 0.5] * 4
@@ -69,6 +69,7 @@ class RobotConfig(BaseConfiguration):
         self.lower_limits_joint = None
         self.surpasing_limits = None
         self.height_samples = None
+        self.default_mass = None if not("mass" in self.cfg["asset_options"]) else self.cfg["asset_options"]["mass"]
 
         self.rewards = rewards
         self.config_intial_position = [self.cfg["asset_options"]["initial_postion"][axis]
@@ -122,6 +123,9 @@ class RobotConfig(BaseConfiguration):
         self.previous_started_position_recording = None
         self.cameras_take_frame = 0
         self.recorded_frames = []
+        self.stored_actions_0leg = []
+        self.stored_desired_0leg = []
+        self.stored_actions = []
 
         self.__create_camera()
 
@@ -207,8 +211,10 @@ class RobotConfig(BaseConfiguration):
         
         self.root_states[env_ids, :3] = self.started_position[env_ids]
 
-        # if self.start_random_vel:
-        #     self.root_states[env_ids, 7:13] = torch_rand_float(-0.5, 0.5, (len(env_ids), 6), device=self.device)
+
+        if self.start_random_vel and False:
+            random = torch_rand_float(-0.5, 0.5, (len(env_ids), 6), device=self.device)
+            self.root_states[env_ids, 7:13] = random
 
         a = [0., 0., 0., 1]
         self.root_states[env_ids, 3:7] = torch.FloatTensor(a).to(self.device)
@@ -235,9 +241,13 @@ class RobotConfig(BaseConfiguration):
             self.started_position = self.curricula.get_terrain_curriculum(self.started_position)
 
         self.rep = 0
+        self.stored_actions_0leg = []
+        self.stored_actions = []
+        self.stored_desired_0leg = []
         # self._reset_root(None)
         # self._reset_dofs(None)
         self.reset_envs(None, _all=True)
+        self.env_touching.fill_(0)
 
     def _clean_previous_information(self, envs_id):
         self.previous_dof_vel[envs_id] = 0.
@@ -271,18 +281,27 @@ class RobotConfig(BaseConfiguration):
 
         self._clean_previous_information(envs_id)
 
+    def get_final_distance(self):
+        return self.distance
+    
+    def save_distance(self):
+        self.distance = self.compute_env_distance().detach().clone()
+
     def check_termination(self):
+        current_pos_limit = self.__check_pos_limit()
         if self.limits is None:
-            self.limits = self.__check_pos_limit()
+            self.limits = current_pos_limit
         else:
-            self.limits += self.__check_pos_limit()
+            self.limits += current_pos_limit
 
         touching = self.rewards.high_penalization_contacts if hasattr(self.rewards,
                                                                       'high_penalization_contacts') else None
-        self.finished |= self.limits > 1.
+        self.env_touching |= touching > 0.
+        self.finished |= current_pos_limit > 0.
 
         if not (None is touching):
-            self.finished |= touching > 1.
+            current_state_touching = self.rewards.high_penalization_state
+            self.dones = current_state_touching
 
         all_touching = torch.all(touching > 1, dim=0) if not (None is touching) else False
         all_limits = torch.all(self.limits > 1., dim=0)
@@ -295,6 +314,11 @@ class RobotConfig(BaseConfiguration):
 
         if all_touching or all_limits:
             self.finished.fill_(1)
+            self.dones.fill_(1)
+
+    def inserte_push(self):
+        random = torch_rand_float(-0.5, 0.5, (self.num_envs, 6), device=self.device)
+        self.root_states[:, 7:13] += random
 
     def _refresh_gym_tensors_(self):
         self.gym.refresh_actor_root_state_tensor(self.sim)
@@ -325,6 +349,7 @@ class RobotConfig(BaseConfiguration):
             joint_acceleration_keyword: self.aceeleration_dof,
             count_limit_vel_keyword: self.surpassing_velocity_limits,
             count_joint_limits_keyword: self.surpasing_limits,
+            current_torques_keyword: self.torques,
             # offset_keyword: self.terrain_config.get_height_body_centre(self.root_states[:, :3])
         }
 
@@ -535,8 +560,6 @@ class RobotConfig(BaseConfiguration):
 
         feet_names = [s for s in body_names if self.cfg["asset_options"]["foot_contacts_on"] in s]
 
-        print(body_names)
-        print(feet_names)
         self.feet_indices = torch.zeros(len(feet_names), dtype=torch.long, device=self.device, requires_grad=False)
         for i in range(len(feet_names)):
             self.feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0],
@@ -550,6 +573,10 @@ class RobotConfig(BaseConfiguration):
         self.finished = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
         self.previous_dof_vel = self.dof_vel.detach().clone()
         self.aceeleration_dof = self.dof_vel.detach().clone()
+        self.controller_error = torch.zeros(self.num_envs, 12, dtype=torch.float, device=self.device, requires_grad=False) 
+        self.desired_config = torch.zeros(self.num_envs, 12, dtype=torch.float, device=self.device, requires_grad=False) 
+        self.env_touching = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
+        self.distance = torch.zeros(self.num_envs, device=self.device, requires_grad=False)
 
         self.__prepare_distance_and_termination_rollout_buffers_()
 
@@ -726,13 +753,21 @@ class RobotConfig(BaseConfiguration):
 
                 obs, obs_expert = self.create_observations()
                 dones = self.finished.detach().clone()
-                self.finished.fill_(0)
                 info = None
 
             if self.save_actions:
                 self.store_information(obs, self.desired_config)
 
-        return obs, obs_expert, self.actions, self.reward, dones, info, closed_simulation
+        n_robot = self.curricula.get_robot_in_level_zero()
+
+        if type(n_robot) != int:
+            n_robot = 0
+
+        self.stored_actions_0leg.append(self.dof_pos[n_robot][:3].tolist())
+        self.stored_actions.append(self.dof_pos[n_robot].tolist())
+        self.stored_desired_0leg.append(self.desired_config[n_robot, :3].tolist())
+
+        return obs, obs_expert, self.actions, self.reward, self.dones, info, closed_simulation
 
     def compute_graphics(self):
         if self.render_GUI:
@@ -1054,9 +1089,12 @@ class RobotConfig(BaseConfiguration):
 
 
     def _process_rigid_body_props(self, body_prop, n_env):
-        self.default_body_mass = body_prop[0].mass
-
+        self.default_body_mass = body_prop[0].mass if self.default_mass is None else self.default_mass
+        
         body_prop[0].mass = self.default_body_mass + self.payloads[n_env]
+        print("=======")
+        print(f"default mass: {self.default_body_mass}, new mass: {body_prop[0].mass}")
+        print("=======")
 
         return body_prop
 

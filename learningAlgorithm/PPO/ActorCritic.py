@@ -130,6 +130,9 @@ class ActorCritic(nn.Module):
 
     def _scale_output(self, selected_action):
         return self.range_scaled * selected_action + self.min_range
+    
+    def scale_ouput_tanh(self, selected_action):
+        return self.max_range * selected_action
 
     def act_expert_encoder(self, expert_observations):
         output_head_cpg_phi = 1.
@@ -160,7 +163,7 @@ class ActorCritic(nn.Module):
         selected_action = self.actor_NN(torch.cat((observations, latent_space), dim=-1))
 
         if self.scale_output:
-            selected_action = self._scale_output(selected_action)
+            selected_action = self.scale_ouput_tanh(selected_action)
 
         return selected_action
 
@@ -218,6 +221,7 @@ class ActorCritic(nn.Module):
             self.scale_output = True
             self.range_scaled = accepted["scale_max"] - accepted["scale_min"]
             self.min_range = accepted["scale_min"]
+            self.max_range = accepted["scale_max"]
 
         if "head_encoder_cpg_actions" in accepted and accepted["head_encoder_cpg_actions"] is not None:
             self.head_encoder_cpg_actions_activated = True
@@ -262,7 +266,8 @@ class ActorCritic(nn.Module):
         if self.debug_mess:
             print("Starting to build the Student")
 
-        layers = self.__generic_MLP_building__(studentArgs)
+        layers = self.__generic_MLP_building__(studentArgs, scale_output=self.head_cpg_actions_encoder_activated or
+                                                                        self.head_phi_cpg_activated)
 
         if self.debug_mess:
             print("Creating the Student ...", end='  ')
@@ -291,7 +296,7 @@ class ActorCritic(nn.Module):
         if self.debug_mess:
             print("Starting to build the Actor")
 
-        layers = self.__generic_MLP_building__(actorArgs, scale_output=self.scale_output)
+        layers = self.__generic_MLP_building__(actorArgs, scale_output=self.scale_output, use_tanh=True)
 
         if self.debug_mess:
             print(f"Creating the Actor{' with scaled output' if self.scale_output else ''} ...", end='  ')
@@ -316,7 +321,7 @@ class ActorCritic(nn.Module):
             print("Done")
 
     @staticmethod
-    def __generic_MLP_building__(args, scale_output=False):
+    def __generic_MLP_building__(args, scale_output=False, use_tanh=False):
         activation = get_activation(args.activation)
 
         layers = []
@@ -334,7 +339,7 @@ class ActorCritic(nn.Module):
         layers.append(nn.Linear(size_input, args.outputs[0]))
 
         if scale_output:
-            layers.append(get_activation("sigmoid"))
+            layers.append(get_activation("sigmoid" if not use_tanh else "tanh"))
         # nn.init.normal_(layers[-1].weight, mean=0.0, std=0.0)
 
         return layers

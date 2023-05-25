@@ -67,7 +67,7 @@ class Logger:
     video_settings: VideoSettings
 
     def __init__(self, save=False, frequency=20, frequency_plot=5, robot="", nn_config=None, PIBB_param=None,
-                 test_value=False, size_figure=2, video_frequency=0, video_settings=None, show_PPO_graph=False):
+                 test_value=False, size_figure=4, video_frequency=0, video_settings=None, show_PPO_graph=False):
 
         if video_frequency != 0 and video_settings is None:
             raise Exception("Set up the settings for recording the video")
@@ -126,10 +126,17 @@ class Logger:
         self.mean_distances = []
         self.mean_reward = []
         self.mean_std_height = []
+        self.falling_robots = []
+
+        self.x_axis_plot = []
+        self.mean_distances_plot = []
+        self.mean_reward_plot = []
+        self.soft_reward_plot = []
+        self.falling_robots_plot = []
         self.iteration = 0
 
         if not PLOT_IN_OTHER_FILE:
-            self.figure, self.ax = plt.subplots(size_figure)
+            self.figure, self.ax = plt.subplots(2, 2)
         else:
             self.figure = None
             self.ax = None
@@ -291,7 +298,7 @@ class Logger:
         if self.save_data:
             os.mkdir(self.folder)
 
-    def plot_in_grap(self):
+    def plot_in_grap(self, plot_full_data=False):
         if self.test_value:
 
             xpoints = np.array(self.time)
@@ -303,26 +310,50 @@ class Logger:
 
             self.ax.plot(xpoints, ypoints)
         else:
-            xpoints = np.array(self.x_axis)
-            ypoints = np.array([r * 10 for r in self.mean_reward])
 
-            self.ax[0].clear()
+            plot_x_value = self.x_axis if plot_full_data else self.x_axis_plot
+            plot_soft_reward_value = self.soft_reward if plot_full_data else self.soft_reward_plot
+            plot_mean_distances_value = self.mean_distances if plot_full_data else self.mean_distances_plot
+            plot_mean_reward_value = self.mean_reward if plot_full_data else self.mean_reward_plot
+            plot_fallen_value = self.falling_robots if plot_full_data else self.falling_robots_plot
 
-            self.ax[0].set_title("Avg. reward vs iteration")
-            self.ax[0].set_xlabel("Iteration")
-            self.ax[0].set_ylabel("Reward")
+            xpoints = np.array(plot_x_value)
+            ypoints = np.array([r * 10 for r in plot_mean_reward_value])
 
-            self.ax[0].plot(xpoints, ypoints, 'b', label='instant')
-            self.ax[0].plot(xpoints, np.array([r * 10 for r in self.soft_reward]), 'r', label='mean')
-            self.ax[0].legend()
-            ypoints = np.array(self.mean_distances)
+            self.ax[0][0].clear()
 
-            self.ax[1].clear()
+            self.ax[0][0].set_title("Avg. reward vs iteration")
+            # self.ax[0].set_xlabel("Iteration")
+            self.ax[0][0].set_ylabel("Reward")
 
-            self.ax[1].set_title("Avg. distance (m) vs iteration")
-            self.ax[1].set_xlabel("Iteration")
-            self.ax[1].set_ylabel("Distance (m)")
-            self.ax[1].plot(xpoints, ypoints)
+            self.ax[0][0].plot(xpoints, ypoints, 'b', label='instant')
+            self.ax[0][0].plot(xpoints, np.array([r * 10 for r in plot_soft_reward_value]), 'r', label='mean')
+            self.ax[0][0].legend()
+
+            ypoints = np.array(plot_mean_distances_value)
+            self.ax[1][0].clear()
+
+            self.ax[1][0].set_title("Avg. distance (m) vs iteration")
+            self.ax[1][0].set_xlabel("Iteration")
+            self.ax[1][0].set_ylabel("Distance (m)")
+            self.ax[1][0].plot(xpoints, ypoints)
+
+            ypoints = np.array(plot_fallen_value)
+            self.ax[0][1].clear()
+
+            self.ax[0][1].set_title("N fallen robots vs iteration")
+            self.ax[0][1].set_xlabel("Iteration")
+            self.ax[0][1].set_ylabel("n robots")
+            self.ax[0][1].plot(xpoints, ypoints)
+
+            ypoints = np.array(self.dof_pos)
+            self.ax[1][1].clear()
+
+            self.ax[1][1].set_xlabel("timestep")
+            self.ax[1][1].set_ylabel("position (rad)")
+            self.ax[1][1].plot(ypoints)
+            ypoints = np.array(self.dof_desired)
+            self.ax[1][1].plot(ypoints, linestyle='dashed', alpha=0.5)
 
     def plot_PPO_progres(self):
         if not(self.ax_PPO_param is None):
@@ -397,7 +428,7 @@ class Logger:
 
     def plot_log(self, save=True, block=True, plot_file_name="", save_datapoint=False):
 
-        self.plot_in_grap()
+        self.plot_in_grap(save)
         self.figure.set_size_inches(18.5, 10.5)
         ppo_graph_on = self.show_PPO_graph and len(self.time_steps_PPO) != 0
 
@@ -422,6 +453,14 @@ class Logger:
         plt.show(block=block)
         plt.pause(0.001)
 
+    def new_interval_plot(self, remove_indices):
+        self.x_axis_plot = [i for j, i in enumerate(self.x_axis_plot) if j not in remove_indices]
+        self.mean_reward_plot = [i for j, i in enumerate(self.mean_reward_plot) if j not in remove_indices]
+        self.soft_reward_plot = [i for j, i in enumerate(self.soft_reward_plot) if j not in remove_indices]
+        self.mean_distances_plot = [i for j, i in enumerate(self.mean_distances_plot) if j not in remove_indices]
+        self.falling_robots_plot = [i for j, i in enumerate(self.falling_robots_plot) if j not in remove_indices]
+
+
     def store_PPO_run_info(self, PPO_info, iteration):
         if not(PPO_info is None) and self.show_PPO_graph and (iteration % self.frequency_plot) == 0:
             self.gamma.append(PPO_info["gamma"])
@@ -434,7 +473,7 @@ class Logger:
             self.loss_mean.append(PPO_info["loss_mean"])
             self.time_steps_PPO.append(PPO_info["time_steps_PPO"])
 
-    def store_data(self, distance, reward, weight, noise, iteration, total_time, std_height=None, show_plot=False,
+    def store_data(self, distance, reward, weight, noise, iteration, total_time, falling_robots, dof_pos, dof_desired, std_height=None, show_plot=False,
                    pause=False, PPO_info=None):
 
         mean_reward = float(torch.mean(reward))
@@ -451,6 +490,16 @@ class Logger:
             self.mean_reward.append(mean_reward)
             self.mean_std_height.append(std_height_mean)
             self.soft_reward.append(float(np.mean(self.mean_reward[-5:])))
+            self.falling_robots.append(falling_robots)
+
+            self.x_axis_plot.append(iteration)
+            self.mean_distances_plot.append(mean_distance)
+            self.mean_reward_plot.append(mean_reward)
+            self.soft_reward_plot.append(float(np.mean(self.mean_reward_plot[-5:])))
+            self.falling_robots_plot.append(falling_robots)
+
+            self.dof_pos = dof_pos
+            self.dof_desired = dof_desired
 
             self.store_PPO_run_info(PPO_info, iteration)
 
@@ -515,9 +564,19 @@ class Logger:
 
         self.algorithm_parameters = None
 
-    def __save_rewards_param(self):
-        with open(os.path.join(self.folder, "rewards_param.json"), "w") as f:
-            json.dump(self.rewards_weights, f, indent=2)
+    def save_rewards(self, rewards, filename):
+        if self.save_data:
+            self.__save_rewards_param(filename=filename, rewards=rewards)
+
+    def __save_rewards_param(self, filename=None, rewards=None):
+        if filename is None:
+            filename = "rewards_param.json"
+
+        if rewards is None:
+            rewards = self.rewards_weights
+
+        with open(os.path.join(self.folder, filename), "w") as f:
+            json.dump(rewards, f, indent=2)
 
         self.rewards_weights = None
 

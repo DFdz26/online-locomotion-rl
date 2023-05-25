@@ -94,7 +94,7 @@ class Runner:
 
         elapsed_time_iteration = now_time - self.starting_iteration_time
         total_elapsed_time = now_time - self.starting_training_time
-        distance = torch.mean(self.agents.compute_env_distance())
+        distance = torch.mean(self.agents.get_final_distance())
         noise = self.learning_algorithm.get_noise()
         best_index = torch.argmax(distance if self.best_distance else rewards)
 
@@ -102,7 +102,8 @@ class Runner:
             noise = noise.detach().clone()
 
         self.logger.store_data(distance, rewards, self.learning_algorithm.get_weights_policy(), noise, iteration,
-                               total_elapsed_time, show_plot=False)
+                               total_elapsed_time, self.fallenn_step, self.agents.stored_actions_0leg, 
+                               self.agents.stored_desired_0leg, show_plot=False)
         loss_AC, loss_AC_with_supervision = self.learning_algorithm.update(self.policy, rewards)
         self.learning_algorithm.print_info(rewards, iteration, total_elapsed_time, elapsed_time_iteration,
                                            loss_AC, self.long_buffer, loss_AC_with_supervision)
@@ -127,38 +128,52 @@ class Runner:
 
         closed_simulation = False
         start_rand = False
+        push_robot = False
         new_frequency = None
+        frequency_change = None
         self.starting_training_time = time.time()
         self.learning_algorithm.prepare_training(self.agents, steps_ppo, self.num_observation_sensor,
                                                  self.num_expert_observation, self.num_actions, self.policy)
 
-        for i in range(iterations):
+        for i in range(1000):
             self.starting_iteration_time = time.time()
 
-            if i == 300:
+            if i == 200:
                 self.agents.get_record_robot()
+
+            if i == 150:
+                push_robot = True
+                
 
             for step in range(steps_per_iteration):
                 dt = new_frequency
 
+                if step == 75 and push_robot:
+                    self.agents.inserte_push()
+
                 if dt is not None:
                     dt = (dt/4)*self.learning_algorithm.get_dt_cpgs()
 
-                actions, ppo_rw = self.learning_algorithm.act(self.obs, self.obs_exp, self.prev_obs, dt=dt)
+                actions, ppo_rw, rw_ppo_noise = self.learning_algorithm.act(self.obs, self.obs_exp, self.prev_obs, dt=dt, frequency_change=frequency_change)
 
                 self.obs, self.obs_exp, actions, reward, \
                     dones, info, closed_simulation = self.agents.step(None, actions,
                                                                       iterations_without_control=new_frequency)
-                reward = self.rewards.include_ppo_reward_penalization(ppo_rw, reward)
+                reward = self.rewards.include_ppo_reward_penalization(ppo_rw, rw_ppo_noise, reward, self.curricula.get_robot_levels())
                 self._store_history()
+                self.agents.save_distance()
+                # print(step, self.agents.distance.mean())
 
                 if step == (steps_per_iteration - 1):
                     dones.fill_(1)
 
-                self.learning_algorithm.post_step_simulation(self.obs, self.obs_exp, actions, reward * 0.5, dones, info,
+                if torch.all(dones > 0):
+                    self.agents.save_distance()
+
+                self.learning_algorithm.post_step_simulation(self.obs, self.obs_exp, actions, reward, dones, info,
                                                              closed_simulation)
                 if self.reset_envs_flag:
-                    self.agents.reset_envs(dones.nonzero())
+                    self.agents.reset_envs(torch.flatten(dones.nonzero()))
 
                 self._recording_process()
                 if closed_simulation or torch.all(dones > 0):
@@ -167,9 +182,13 @@ class Runner:
             if closed_simulation:
                 break
 
-            if i == 300:
+            if i == 200:
                 self.agents.stop_record_robot()
 
+            print("*******")
+            self.fallenn_step = int(torch.count_nonzero(self.agents.env_touching))
+
+            print(f"Fallen robots: {torch.count_nonzero(self.agents.env_touching)}")
             self.long_buffer = torch.mean(self.agents.episode_length_buf.to(torch.float32))
             self._stop_recording()
             final_reward = self.agents.compute_final_reward()
@@ -185,7 +204,7 @@ class Runner:
                                                                 self.rewards, self.learning_algorithm,
                                                                 steps_per_iteration)
                     steps_per_iteration, update_randomization, started_randomization, self.reset_envs_flag, \
-                        new_frequency = aux
+                        new_frequency, body_push = aux
 
                     if start_rand is False:
                         start_rand = started_randomization
@@ -196,6 +215,9 @@ class Runner:
                     
                     if update_randomization and start_rand:
                         self.agents.get_new_randomization()
+
+                    if body_push:
+                        self.agents.enable_random_body_vel_beginning()
 
                 # Reset the environments, the reward buffers and get the first observation
 

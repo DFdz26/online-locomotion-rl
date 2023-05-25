@@ -65,6 +65,12 @@ class HopfOscillators(torchNet):
 
     def get_cpg_dt(self):
         return self.expected_dt
+    
+    def change_maximum_speed_cpg(self, new_max, dt=None):
+        self.change_maximum_phase_change(new_max)
+
+        if dt is not None:
+            self.change_default_dt(dt)
 
     def convert_phase_command(self, command):
 

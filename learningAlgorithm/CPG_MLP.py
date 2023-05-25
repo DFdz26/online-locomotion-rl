@@ -232,11 +232,11 @@ class PPO_PIBB:
             # return PIBB_actions 
             # return self.learnt_weight["PPO"]* PPO_actions 
         else:
-            action, rw_ppo_diff_cpg = self.curricula.act_curriculum(observation, expert_obs, history_obs, self.PPO,
+            action, rw_ppo_diff_cpg, rw_ppo_noise = self.curricula.act_curriculum(observation, expert_obs, history_obs, self.PPO,
                                                                     self.PIBB, change_frequency=frequency_change, dt=dt)
             self.gamma_PPO = self.curricula.algorithm_curriculum.gamma
 
-            return action, rw_ppo_diff_cpg
+            return action, rw_ppo_diff_cpg, rw_ppo_noise
 
     def change_maximum_frequency_cpg(self, maximum, dt=None):
         self.PIBB.change_max_frequency_cpg(maximum, dt)

@@ -24,6 +24,7 @@ current_actions_keyword = 'current_action'
 joint_acceleration_keyword = 'acceleration_joints'
 count_limit_vel_keyword = 'velocity_limits_count'
 count_joint_limits_keyword = 'joint_limits_count'
+current_torques_keyword = 'current_torques'
 
 
 class IndividualReward:
@@ -111,6 +112,8 @@ class IndividualReward:
     def _prepare_buffer_high_penalization_contacts_term_(self):
         self.high_penalization_contacts = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device,
                                                       requires_grad=False)
+        self.high_penalization_state = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device,
+                                                      requires_grad=False)
 
     def _prepare_buffer_height_error_term_(self):
         self.accumulative_height_error = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
@@ -123,6 +126,10 @@ class IndividualReward:
     def _prepare_buffer_changed_actions_term_(self):
         self.changed_actions_buffer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
                                                   requires_grad=False)
+        
+    def _prepare_buffer_torque_penalization_term_(self):
+        self.torque_penalization_buffer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                      requires_grad=False)
 
     ###############################################################################################
     """
@@ -154,6 +161,16 @@ class IndividualReward:
 
         return in_state
     
+
+    def _compute_in_state_torque_penalization_term_(self, simulation_info, reward_data):
+        torque = simulation_info[current_torques_keyword]
+        weight = reward_data['weight']
+
+        in_state = torch.sum(torch.square(torque), dim=-1) * weight
+
+        self.torque_penalization_buffer += in_state
+        return in_state
+    
     def _compute_in_state_velocity_smoothness_term_(self, simulation_info, reward_data):
         velocity = simulation_info[joint_velocity_keyword]
         acceleration = simulation_info[joint_acceleration_keyword]
@@ -164,7 +181,7 @@ class IndividualReward:
         vel = torch.square(velocity)
         acc = torch.square(acceleration)
         
-        in_state = w_tot * torch.sum((w_vel * vel + w_acc * acc), dim=-1)
+        in_state = w_tot * torch.sum((w_vel * torch.square(vel) + w_acc * torch.square(acc)), dim=-1)
         self.vel_smothness_buffer += in_state
 
         return in_state
@@ -284,7 +301,9 @@ class IndividualReward:
         termination_contact_indices = simulation_info[termination_contact_indices_keyword]
 
         in_state = torch.any(torch.norm(contact_forces[:, termination_contact_indices, :], dim=-1) > 1., dim=1)
+        # print(in_state)
         self.high_penalization_contacts += in_state
+        self.high_penalization_state = in_state
 
         return in_state
 
@@ -419,6 +438,9 @@ class IndividualReward:
             return torch.abs(self.x_distance)
         else:
             return self.x_distance
+        
+    def _compute_final_torque_penalization_term_(self, simulation_info, reward_data):
+        return self.torque_penalization_buffer
     
     def _compute_final_velocity_smoothness_term_(self, simulation_info, reward_data):
         return self.vel_smothness_buffer
@@ -536,6 +558,9 @@ class IndividualReward:
         self.x_distance = None
         self.x_distance_step = None
 
+    def _clean_buffer_torque_penalization_(self):
+        self.torque_penalization_buffer.fill_(0)
+
     def _clean_buffer_velocity_smoothness_(self):
         self.vel_smothness_buffer.fill_(0)
 
@@ -601,7 +626,7 @@ class IndividualReward:
 
 
 class Rewards(IndividualReward):
-    def __init__(self, num_envs, device, rewards, gamma, steps, discrete_rewards=False):
+    def __init__(self, num_envs, device, rewards, gamma, steps, logger, discrete_rewards=False):
         super().__init__(num_envs, device)
         self.reward_terms = None
         self.gamma = gamma
@@ -610,12 +635,33 @@ class Rewards(IndividualReward):
         self.iterations = 0
         self.previous_time = 0
         self.current_reward = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.rw_diff = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.rw_nooise = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
         self.discrete_rewards = discrete_rewards
-
+        self.logger = logger
         self.change_rewards(rewards)
         self.ignore_rewards = [
-            "ppo_penalization"
+            "ppo_penalization",
+            "noise_ppo_penalization"
         ]
+        self.constant_increase = 1.
+        self.dic_rw = {}
+        self.cst_ppo = 0.1
+
+    def clear_constant_increase(self):
+        self.constant_increase = 0.
+
+    def increase_cst_ppo(self):
+        self.cst_ppo += 0.1
+    
+    def increase_constant_by_step(self, step):
+        self.constant_increase += step 
+
+        if self.constant_increase >+ 1.:
+            self.constant_increase = 1.
+            return False
+        else:
+            return True
 
     def get_rewards(self):
         return self.reward_terms
@@ -630,13 +676,29 @@ class Rewards(IndividualReward):
 
             getattr(self, '_prepare_buffer_' + reward_name + '_term_')()
 
-    def include_ppo_reward_penalization(self, penalization, rewards):
+    def include_ppo_reward_penalization(self, penalization, noise, rewards, terrain_levels):
         if penalization is None:
             return rewards
 
         weight = self.reward_terms["ppo_penalization"]["weight"]
+        weight_noise = self.reward_terms["noise_ppo_penalization"]["weight"]
+        discount = self.reward_terms["ppo_penalization"]["discount_level"]
 
-        rewards += weight * penalization
+        if terrain_levels is not None:
+            weight = weight / (1 + terrain_levels * discount)
+
+        rw = weight * penalization / self.steps 
+        self.rw_diff += rw
+        # rw /= (1 + self.constant_increase/5)
+        rewards += rw
+
+        noise_rw = weight_noise * noise / self.steps * (self.cst_ppo * 10)
+        self.rw_nooise += noise_rw
+        # noise_rw /= (1 + self.constant_increase/4)
+        # print(rw.mean(), noise_rw.mean())
+        rewards += noise_rw
+
+        self.current_reward += rewards
 
         return rewards
 
@@ -657,6 +719,10 @@ class Rewards(IndividualReward):
             reward_data = None if not ("reward_data" in self.reward_terms[reward_name]) else \
                 self.reward_terms[reward_name]['reward_data']
             weight = self.reward_terms[reward_name]['weight']
+            cst = 1
+            if "curriculum" in self.reward_terms[reward_name]:
+                cst = self.constant_increase if self.reward_terms[reward_name]["curriculum"] else 1
+                # print(reward_name, cst)
 
             ind_rw = getattr(self, '_compute_in_state_' + reward_name + '_term_')(simulation_info, reward_data)
 
@@ -664,9 +730,19 @@ class Rewards(IndividualReward):
                 continue
 
             # if self.iterations % 10 == 0:
-            #     print(f'{reward_name}: {ind_rw}')
+            #     try:
+            #         print(f'{reward_name}: {ind_rw.mean() * cst * weight}')
+            #     except RuntimeError:
+            #         pass
 
-            rw += ind_rw * weight / self.steps
+            rw += ind_rw * weight / self.steps * cst
+
+            if not(reward_name is self.dic_rw):
+                self.dic_rw[reward_name] = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+
+            self.dic_rw[reward_name] += rw
+            # if "high_penalization_contacts" == reward_name:
+            #     print(ind_rw, rw)
 
         self.iterations += 1
         self.current_reward += rw * self.current_gama
@@ -702,6 +778,15 @@ class Rewards(IndividualReward):
         self.current_gama = 1.
         self.previous_time = 0
         self.current_reward.fill_(0)
+        print(self.rw_diff.mean(), self.rw_nooise.mean())
+        self.rw_nooise.fill_(0)
+        self.rw_diff.fill_(0)
+
+        for rw_n in self.dic_rw.keys():
+            print(f"{rw_n}: {self.dic_rw[rw_n].mean()}", end="; ")
+            self.dic_rw[rw_n].fill_(0)
+
+        print()
 
         for reward_name in self.reward_terms.keys():
             if reward_name in self.ignore_rewards:
@@ -710,6 +795,23 @@ class Rewards(IndividualReward):
             getattr(self, '_clean_buffer_' + reward_name + '_')()
 
         self.iterations = 0
+
+    def set_all_weights_zero(self, erase_points=None):
+        for reward_name in self.reward_terms.keys():
+            if reward_name in self.ignore_rewards:
+                continue
+
+            self.reward_terms[reward_name]['weight'] = 0.0
+
+            if "curriculum" in self.reward_terms[reward_name]:
+                self.reward_terms[reward_name]['curriculum'] = False
+
+        if erase_points is not None:
+            self.logger.new_interval_plot(erase_points)
+
+    def save_weights(self, filename):
+        self.logger.save_rewards(self.reward_terms, filename)
+
 
 
 if __name__ == "__main__":

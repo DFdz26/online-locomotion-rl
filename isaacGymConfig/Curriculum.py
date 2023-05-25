@@ -384,6 +384,12 @@ class AlgorithmCurrCfg:
         boost_kl_distance = 50.
         decay_boost_kl_distance = 0.92
         n_iterations_learning_from_CPG_RBFN = 50
+        gamma_filter = 0.3
+        start_with_influence = 0.15
+        max_influence = 0.5
+        change_rw_iter = 100
+        enable_body_vel_random = 100
+        step_increase_rw = 0.0
 
     class PIBBCfg:
         stop_learning = True
@@ -420,18 +426,23 @@ class AlgorithmCurriculum:
         self.count_increase_gamma = 0
         self.PPO = None
         self.verbose = verbose
-        self.start_PPO_with_importance = 0.10
-
+        self.start_PPO_with_importance = self.cfg.PPOCfg.start_with_influence
+        self.gamma_filter_PPO = cfg.PPOCfg.gamma_filter
+        self.filtered_actions_PPO = None
+        self.step_increase_rw = self.cfg.PPOCfg.step_increase_rw
         self.CPG_influence = 1.
         self.start_decrease_CPG = False
 
         self.PPO_learning_activated = False
         self.PIBB_learning_activated = False
         self.mult_PPO_rw = 1000
+        self.ppo_iterations_activated = 0
+        self.constant_curr_activated = True
 
         self.PPO_activated = False
         self.PIBB_activated = False
         self.learning_actor_from_cpg = False
+        self.previous_ppo_action = None
         self.iteration_starting_CPG_teacher = self.cfg.PIBBCfg.threshold - \
                                               self.cfg.PPOCfg.n_iterations_learning_from_CPG_RBFN
 
@@ -464,21 +475,242 @@ class AlgorithmCurriculum:
             self.PIBB_activated = True
             self.PIBB_learning_activated = True
 
+    def _change_rw_in_mlp_cpg(self, RewardObj: Rewards):
+
+        # rw_weights = RewardObj.get_rewards()
+
+        # rw_weights["ppo_penalization"]["weight"]  *= 0.05
+        # rw_weights["velocity_smoothness"]["weight"]  *= 10
+        # rw_weights["high_penalization_contacts"]["weight"] = -0.5
+        # rw_weights["x_velocity"]["weight"]  = 0.001
+        # rw_weights["roll_pitch"]["weight"]  *= 3.5
+        # rw_weights["slippery"]["weight"]  = 2.5
+        # rw_weights["y_velocity"]["weight"]  = 0.008
+        # rw_weights["yaw_vel"]["weight"]  = 0.008 * 10
+        # rw_weights["z_vel"]["weight"] = 0.01
+        # rw_weights["torque_penalization"]["weight"] = 0.01
+
+        # RewardObj.save_weights("rewards_PPO.json")
+        # # rw_weights["changed_actions"]["weight"] *= 2.5
+        # #rw_weights["height_error"]["weight"] /= 2
+
+        # RewardObj.change_rewards(rw_weights)
+        pass
+
     @staticmethod
     def _change_RW_scales_(RewardObj: Rewards):
         rw_weights = RewardObj.get_rewards()
 
-        rw_weights["roll_pitch"]["weight"] *= 2.25
+        rw_weights["roll_pitch"]["weight"] *= 2.25 * 3
         rw_weights["yaw_vel"]["weight"] *= 1.5 * 2
-        # rw_weights["x_velocity"]["weight"] /= 1.1
+        rw_weights["y_velocity"]["weight"] /= 0.2
         rw_weights["x_velocity"]["weight"] /= 1.1
         rw_weights["height_error"]["weight"] /= 10.
         # rw_weights["smoothness"]["weight"] *= 2.
-        rw_weights["high_penalization_contacts"]["weight"] *= 7 * 15 * 10 * 5 * 1.5
-        rw_weights["velocity_smoothness"]["weight"] *= 2. * 0.00001 * 50
-        rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 1210./500.  # 1200
+        rw_weights["high_penalization_contacts"]["weight"] *= 7 * 15 * 10 * 5 * 1.5 * 7 * 1.75
+        rw_weights["velocity_smoothness"]["weight"] *= 2. * 3
+        # rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= 1210./500.  # 1200
         rw_weights["slippery"]["weight"] = 1.
         rw_weights["height_error"]["weight"] /= (12 * 3.2)
+        RewardObj.save_weights("rewards_PPO_change.json")
+        # rw_weights["changed_actions"]["weight"] *= 2.5
+        #rw_weights["height_error"]["weight"] /= 2
+
+        RewardObj.change_rewards(rw_weights)
+
+        RewardObj.set_all_weights_zero(erase_points=list(range(151)))
+        
+        # div = 500000 * 80/2. * 80
+
+        # rw_weights["roll_pitch"]["weight"]  = (1.5 * 20 * 3) / div * 10
+        # rw_weights["yaw_vel"]["weight"]  = 1.5 / div
+        # rw_weights["ppo_penalization"]["weight"]  = (-7 * 10 * 10 * 5 * 100 * 5) / div * 3
+        # rw_weights["ppo_penalization"]["weight"]  = (-7 * 10 * 10 * 5 * 100 * 5) / div * 3
+        # rw_weights["high_penalization_contacts"]["weight"]  = -(200 * 50 * 10) / div * 10 * 50
+        # rw_weights["velocity_smoothness"]["weight"]  = (30 * 1.5 * 2 * 20)/ div
+        # rw_weights["slippery"]["weight"]  = 1 / div * 10
+        # rw_weights["z_vel"]["weight"]  = 1 / div * 10
+        # rw_weights["y_velocity"]["weight"]  = 1 / div * 5
+        # rw_weights["x_velocity"]["weight"]  = 100 / div 
+        # rw_weights["limits"]["weight"]  = 3 / div
+        # rw_weights["torque_penalization"]["weight"]  = 0.1 / div
+        # rw_weights["low_penalization_contacts"]["weight"]  = 1 / div
+
+        rw_weights["ppo_penalization"]["weight"]  = -0.35
+        rw_weights["ppo_penalization"]["weight"]  = -1.5 * 5 / 1.e2
+        rw_weights["ppo_penalization"]["weight"]  = -1.5 * 5 / 1.e1
+        # rw_weights["ppo_penalization"]["weight"]  = 0
+        rw_weights["noise_ppo_penalization"]["weight"]  = -0.075* 5.5* 40 *30 / 1.e2 #6.75  / 1.e11
+        rw_weights["noise_ppo_penalization"]["weight"]  = 0 #6.75  / 1.e11
+        rw_weights["noise_ppo_penalization"]["weight"]  = -0.001 / 1.e1  
+        # rw_weights["noise_ppo_penalization"]["weight"]  = 0 #6.75  / 1.e11
+        rw_weights["velocity_smoothness"]["weight"]  = 0.02 * 0.001
+        rw_weights["velocity_smoothness"]["curriculum"]  = True
+        # rw_weights["velocity_smoothness"]["weight"]  = 0
+
+        rw_weights["high_penalization_contacts"]["weight"]  = -3.5
+        rw_weights["high_penalization_contacts"]["weight"]  = -3.5
+        rw_weights["low_penalization_contacts"]["weight"]  = -1.5
+        rw_weights["high_penalization_contacts"]["curriculum"]  = True
+        rw_weights["high_penalization_contacts"]["curriculum"]  = True
+
+        rw_weights["y_velocity"]["weight"]  = 1.2 * 0
+        rw_weights["y_velocity"]["curriculum"] = True
+
+        rw_weights["x_distance"]["weight"]  = 20 * 40 / 1.e3
+        rw_weights["x_distance"]["weight"]  = 0
+        # rw_weights["x_distance"]["weight"]  = 0
+        rw_weights["x_velocity"]["weight"]  = 0
+        # rw_weights["x_velocity"]["weight"]  = 8
+        rw_weights["x_velocity"]["curriculum"] = True
+
+
+        rw_weights["roll_pitch"]["weight"]  = 2.1
+        rw_weights["roll_pitch"]["weight"]  = 0.001 * 1.e4 * 3.5 *2 * 1.75
+        rw_weights["roll_pitch"]["curriculum"] = True
+        rw_weights["roll_pitch"]["curriculum"] = False
+
+        rw_weights["slippery"]["weight"]  = 0.01
+        rw_weights["slippery"]["weight"]  = 0.1 * 1.e1 * 5
+        rw_weights["slippery"]["curriculum"] = True
+        rw_weights["slippery"]["curriculum"] = True
+
+        rw_weights["torque_penalization"]["weight"]  = 0.0005
+        rw_weights["torque_penalization"]["weight"]  = 0.01/1.e1 * 1.2
+        rw_weights["torque_penalization"]["curriculum"] = True
+        rw_weights["torque_penalization"]["curriculum"] = True
+
+        rw_weights["yaw_vel"]["weight"]  = 1.2
+        rw_weights["yaw_vel"]["weight"]  = 0.01 * 1.e3 * 3
+        rw_weights["yaw_vel"]["curriculum"] = False
+
+        rw_weights["z_vel"]["weight"]  = 0.1 / 1.e3 * 1.2
+        rw_weights["z_vel"]["curriculum"] = True
+
+
+        # rw_weights["velocity_smoothness"]["weight"]  = 0.08
+        # rw_weights["high_penalization_contacts"]["weight"]  = -25
+        # rw_weights["high_penalization_contacts"]["weight"]  = -25
+        # rw_weights["x_velocity"]["weight"]  = 0.0008
+        # rw_weights["roll_pitch"]["weight"]  = 0.7 * 10
+        # rw_weights["slippery"]["weight"]  = 0.1
+        # rw_weights["y_velocity"]["weight"]  = 0.008
+        # rw_weights["yaw_vel"]["weight"]  = 0.008 * 10
+        # rw_weights["z_vel"]["weight"] = 0.01
+        # rw_weights["torque_penalization"]["weight"] = 0.01
+
+        # rw_weights = {
+        #     "x_distance": {
+        #         "weight": 0.0,
+        #         "reward_data": {
+        #         "absolute_distance": True
+        #         }
+        #     },
+        #     "y_distance": {
+        #         "weight": 0.0,
+        #         "reward_data": {
+        #         "absolute_distance": True
+        #         }
+        #     },
+        #     "high_penalization_contacts": {
+        #         "weight": -50,
+        #         "reward_data": {
+        #         "absolute_distance": True,
+        #         "max_clip": 2.5,
+        #         "weights": {
+        #             "correction_state": 0.02,
+        #             "distance": 0.5
+        #         }
+        #         }
+        #     },
+        #     "height_error": {
+        #         "weight": 0.0,
+        #         "reward_data": {
+        #         "max_clip": 2.5
+        #         }
+        #     },
+        #     "slippery": {
+        #         "weight": 1.5,
+        #         "reward_data": {
+        #         "slippery_coef": -1.62
+        #         }
+        #     },
+        #     "z_vel": {
+        #         "weight": 0.01,
+        #         "reward_data": {
+        #         "exponential": False,
+        #         "weight": -0.24
+        #         }
+        #     },
+        #     "roll_pitch": {
+        #         "weight": 1.5,
+        #         "reward_data": {
+        #         "exponential": False,
+        #         "weight": -0.15
+        #         }
+        #     },
+        #     "torque_penalization": {
+        #         "weight": 0.01,
+        #         "reward_data": {
+        #         "weight": -0.0005
+        #         }
+        #     },
+        #     "yaw_vel": {
+        #         "weight": 0.08,
+        #         "reward_data": {
+        #         "exponential": False,
+        #         "weight": -0.1,
+        #         "command": 0.0
+        #         }
+        #     },
+        #     "y_velocity": {
+        #         "weight": 1.8,
+        #         "reward_data": {
+        #         "exponential": False,
+        #         "weight": -0.075
+        #         }
+        #     },
+        #     "x_velocity": {
+        #         "weight": 0.01,
+        #         "reward_data": {
+        #         "exponential": False,
+        #         "weight": 0.178
+        #         }
+        #     },
+        #     "velocity_smoothness": {
+        #         "weight": 0.025,
+        #         "reward_data": {
+        #         "weight_vel": 0.01,
+        #         "weight_acc": 2e-05,
+        #         "weight": -5e-05
+        #         }
+        #     },
+        #     "limits": {
+        #         "weight": 1.0,
+        #         "reward_data": {
+        #         "velocity_limits": 1.0,
+        #         "joint_limits": 1.0,
+        #         "weight": -1
+        #         }
+        #     },
+        #     "ppo_penalization": {
+        #         "weight": -0.45,
+        #         "discount_level": 0.35
+        #     },
+        #     "low_penalization_contacts": {
+        #         "weight": 1.0,
+        #         "reward_data": {
+        #         "absolute_distance": True,
+        #         "max_clip": 2.5,
+        #         "weights": {
+        #             "correction_state": 0.02,
+        #             "distance": 0.5
+        #         }
+        #         }
+        #     }
+        #     }
+
+        RewardObj.save_weights("rewards_PPO.json")
         # rw_weights["changed_actions"]["weight"] *= 2.5
         #rw_weights["height_error"]["weight"] /= 2
 
@@ -491,14 +723,21 @@ class AlgorithmCurriculum:
         if self.cfg.PIBBCfg.change_RW_scales_when_switching:
             rw_weights = rewardObj.get_rewards()
 
+            # rw_weights["yaw_vel"]["weight"] *= 3.2 * 2 * 2 * 3 * 10 * 5
+            # rw_weights["roll_pitch"]["weight"] *= 1.5 * 5 
+            # rw_weights["x_velocity"]["weight"] /= (0.05 *  5.5)
+            # rw_weights["y_velocity"]["weight"] *= 3 * 3
+            # rw_weights["velocity_smoothness"]["weight"] *= 1.2 * 1.5
+            # rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= -500. 
+            # rw_weights["slippery"]["weight"] = 1.1
+            # rw_weights["high_penalization_contacts"]["weight"] *= 0.0015
             rw_weights["yaw_vel"]["weight"] *= 3.2 * 2 * 2 * 3 * 10 * 5
             rw_weights["roll_pitch"]["weight"] *= 1.5 * 5 
-            rw_weights["x_velocity"]["weight"] /= (0.05 *  5.5)
-            rw_weights["y_velocity"]["weight"] *= 3 * 3
-            rw_weights["velocity_smoothness"]["weight"] *= 1.2 * 1.5
-            rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= -500. 
+            # rw_weights["velocity_smoothness"]["reward_data"]["weight_acc"] *= -500.
             rw_weights["slippery"]["weight"] = 1.1
-            rw_weights["high_penalization_contacts"]["weight"] *= 0.0015
+            rw_weights["y_velocity"]["weight"] *= 3 * 3
+            rw_weights["high_penalization_contacts"]["weight"] *= 3
+
             # rw_weights["z_vel"]["weight"] *= 3
 
             rewardObj.change_rewards(rw_weights)
@@ -546,6 +785,9 @@ class AlgorithmCurriculum:
         self.gamma = self.cfg.PPOCfg.gamma
         self.start_decrease_CPG = True
 
+        if self.constant_curr_activated:
+            RewardObj.clear_constant_increase()
+
         if self.cfg.PPOCfg.change_RW_scales:
             self._change_RW_scales_(RewardObj)
 
@@ -553,6 +795,8 @@ class AlgorithmCurriculum:
 
     def set_control_parameters(self, iterations, reward, distance, RewardObj, learningObj, steps_per_iteration):
         self.iteration = iterations
+        
+        enable_body_push = False
 
         if 0 < self.cfg.PIBBCfg.iteration_change_rw_indirect == iterations and self.switching_CPG_RBFN:
             self.change_rw_for_indirect(RewardObj)
@@ -560,8 +804,8 @@ class AlgorithmCurriculum:
         if self.start_decrease_CPG and self.cfg.PIBBCfg.decay_influence < 1.:
             self.CPG_influence *= self.cfg.PIBBCfg.decay_influence
 
-            if self.CPG_influence < 0.5:
-                self.CPG_influence = 0.5
+            if self.CPG_influence < (1 - self.cfg.PPOCfg.max_influence):
+                self.CPG_influence = (1 - self.cfg.PPOCfg.max_influence)
                 self.start_decrease_CPG = False
 
         if self.switching_CPG_RBFN and self.iteration == self.cfg.PIBBCfg.threshold_switching:
@@ -598,7 +842,25 @@ class AlgorithmCurriculum:
             else:
                 self.count_increase_gamma += 1
 
-        return steps_per_iteration, self.PPO_learning_activated
+        if self.PPO_activated and self.ppo_iterations_activated == self.cfg.PPOCfg.enable_body_vel_random:
+            enable_body_push = True
+
+        if self.PPO_activated and self.cfg.PPOCfg.change_rw_iter == self.ppo_iterations_activated:
+            self._change_rw_in_mlp_cpg(RewardObj)
+
+        if self.PPO_activated and self.constant_curr_activated:
+            self.constant_curr_activated = RewardObj.increase_constant_by_step(self.step_increase_rw)
+            # pass
+            
+        
+        if self.PPO_activated:
+            self.ppo_iterations_activated += 1
+
+            # if self.ppo_iterations_activated > 40:
+            #     RewardObj.increase_cst_ppo()
+            #     RewardObj.increase_constant_by_step(self.step_increase_rw)
+
+        return steps_per_iteration, self.PPO_learning_activated, enable_body_push
 
     def _get_error_ppo_cpg_actions(self, PPO_act, PIBB_act):
         error_ppo = torch.zeros()
@@ -611,12 +873,13 @@ class AlgorithmCurriculum:
         actions_CPG = None
         amplitude = 1.
         rw_ppo_diff_cpg = None
+        rw_ppo_noise = None
 
         if self.PPO_activated:
             encoder_info, amplitude = PPO.get_encoder_info(expert_obs)
 
         if self.PIBB_activated:
-            actions_CPG = PIBB.act(observations, expert_obs, action_mult=2.0, phase_shift=change_frequency, dt=dt) * amplitude
+            actions_CPG = PIBB.act(observations, expert_obs, action_mult=1., phase_shift=change_frequency, dt=dt) * amplitude
             # rbfn, rbfn_delayed = PIBB.get_rbf_activations()
 
             actions = actions_CPG
@@ -624,7 +887,23 @@ class AlgorithmCurriculum:
         if self.PPO_activated:
 
             actions_PPO = PPO.act(observations, expert_obs, previous_obs, actions_CPG, actions_mult=1.)
-            rw_ppo_diff_cpg = torch.sum(torch.abs(actions_CPG - actions_PPO), dim=-1)
+            # print(self.filtered_actions_PPO)
+
+            if self.filtered_actions_PPO is None:
+                self.filtered_actions_PPO = actions_PPO
+            else:
+                self.filtered_actions_PPO = self.filtered_actions_PPO * (1 - self.gamma_filter_PPO) + actions_PPO * self.gamma_filter_PPO
+
+            rw_ppo_diff_cpg = torch.sum(torch.square(actions_CPG - actions_PPO), dim=-1)
+
+            # print(self.filtered_actions_PPO[0,0], actions_PPO[0,0])
+
+            if self.previous_ppo_action is None:
+                self.previous_ppo_action = actions_PPO
+
+
+            rw_ppo_noise = torch.sum(torch.square(self.previous_ppo_action - actions_PPO), dim=-1)
+            self.previous_ppo_action = actions_PPO
 
             # Scale the output to be [-2, 2]
             # for i in range(len(actions_PPO)):
@@ -633,16 +912,16 @@ class AlgorithmCurriculum:
             #     actions_PPO[i] = new[0]
 
             if actions is None:
-                actions = actions_PPO * self.gamma
+                actions = self.filtered_actions_PPO * self.gamma
             else:
-                actions = self.CPG_influence * actions + (1 - self.CPG_influence) * actions_PPO
+                actions = self.CPG_influence * actions + (1 - self.CPG_influence) * self.filtered_actions_PPO
 
         elif self.learning_actor_from_cpg:
             PPO.save_data_teacher_student_actor(observations, expert_obs, actions_CPG)
 
         self.gamma = (1 - self.CPG_influence)
 
-        return actions, rw_ppo_diff_cpg
+        return actions, rw_ppo_diff_cpg, rw_ppo_noise
 
     @staticmethod
     def change_maximum_change_cpg(PIBB, maximum_freq, dt=None):
@@ -690,6 +969,8 @@ class AlgorithmCurriculum:
         if self.PPO_learning_activated:
             PPO.last_step(obs, exp_obs, cpg_mov)
 
+        self.previous_ppo_action = None
+
 
 class TerrainCurriculum:
     def __init__(self, num_env, device, cfg=TerrainCurrCfg()) -> None:
@@ -718,6 +999,9 @@ class TerrainCurriculum:
         self.reward = -999
         self.n_jumps = 0
         self.max_difficulty = 0
+
+    def get_individual_levels(self):
+        return self.control_env
 
     def get_robot_in_level_zero(self):
         return (self.control_env == 0).nonzero()[0][0]
@@ -855,7 +1139,7 @@ class Curriculum:
         if not (self.algorithm_curriculum is None):
             return self.algorithm_curriculum.get_curriculum_action(PPO, PIBB, observation, expert_obs, prev_obs, change_frequency=change_frequency, dt=dt)
 
-        return None
+        return None, None, None
 
     def jump_env_to_terrain(self, env, terrain, initial_positions):
         if self.terrain_curriculum is None:
@@ -892,6 +1176,7 @@ class Curriculum:
         randomized_activated = False
         active_reset_envs = False
         new_frequency = None
+        enable_body_push = False
 
         if not (self.terrain_curriculum is None):
             self.terrain_curriculum.set_control_parameters(iterations, reward)
@@ -901,14 +1186,14 @@ class Curriculum:
             randomize_properties, randomized_activated, new_frequency = aux
 
         if not (self.algorithm_curriculum is None):
-            new_steps_per_iteration, active_reset_envs = self.algorithm_curriculum.set_control_parameters(
+            new_steps_per_iteration, active_reset_envs, enable_body_push = self.algorithm_curriculum.set_control_parameters(
                 iterations,
                 reward,
                 distance,
                 RwObj, AlgObj,
                 new_steps_per_iteration)
 
-        return new_steps_per_iteration, randomize_properties, randomized_activated, active_reset_envs, new_frequency
+        return new_steps_per_iteration, randomize_properties, randomized_activated, active_reset_envs, new_frequency, enable_body_push
 
     def get_terrain_curriculum(self, initial_positions):
         if self.terrain_curriculum is None:
@@ -943,3 +1228,9 @@ class Curriculum:
             idx = self.terrain_curriculum.get_robot_in_level_zero()
 
         return idx
+    
+    def get_robot_levels(self):
+        if self.terrain_curriculum is None:
+            return None
+        
+        return self.terrain_curriculum.get_individual_levels()

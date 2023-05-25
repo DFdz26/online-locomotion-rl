@@ -29,7 +29,10 @@ from isaacGymConfig.Curriculum import Curriculum, TerrainCurrCfg, AlgorithmCurrC
 # config_file = "models/configs/config_minicheeta.json"
 # graph_name = "graph_minicheeta_learning"
 # cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/mini_cheetah/06_04_2023__22_07_23/300.pickle"
-cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/b1/2023_05_14.00_13_58/300.pickle"
+cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/b1/2023_05_21.09_58_06/150.pickle"
+cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/b1/2023_05_22.18_08_22/150.pickle"
+cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/b1/2023_05_22.23_04_36/150.pickle"
+cpg_filename = "/home/danny/Downloads/online-locomotion-rl/runs/b1/2023_05_23.21_45_03/150.pickle"
 
 config_file = "models/configs/config_b1.json"
 graph_name = "graph_b1_learning"
@@ -38,14 +41,14 @@ ACTIVE_RECORDING_CAMERA = True
 ACTIVATE_HEIGHT_READ = True
 ACTIVATE_CPG_LATENT_HEAD = True
 ACTIVATE_PHI_AMPLITUDE_HEAD = False
-frequency_recording = 20
-frequency_logger = 50
+frequency_recording = 75
+frequency_logger = 75
 frequency_plot = 2
 
 CURRICULUM_CPG_RBFN = True
 RENDER_GUI = False
 SAVE_DATA = True
-RECOVER_CPG = False
+RECOVER_CPG = True
 LOAD_CACHE = True
 TERRAIN_CURRICULUM = True
 ACTIVATE_HISTORY = True
@@ -54,18 +57,24 @@ rollouts = 1250
 iterations_without_control = 4
 num_env_colums = 100
 # learning_rate_PPO = 0.0000003  # 0.0000003
-start_PPO_acting_iteration = 300
+start_PPO_acting_iteration = 150
 num_mini_batches = 2100
+num_mini_batches = int(150 * 2 * 2 / 4) #/4
+num_mini_batches = int(150 * 2 * 2 / 6) #/4
+num_mini_batches = int(4) #/4
 num_prev_obs = 15
 device = "cuda:0"
 show_PPO_graph = True
 
 intrinsic_frequency_cpg = 7.5
 changing_direct_iteration = 41
-
+changing_direct_iteration = 100 # 100
+max_min_actor = 1
+start_influence_PPO = 0.5
+delay_terrains = 99999
 
 if RECOVER_CPG:
-    start_PPO_acting_iteration = 1
+    start_PPO_acting_iteration = 0
 
 
 def config_camera(activate, _env_config: EnvConfig, _logger: Logger, frames, fps=30):
@@ -103,9 +112,14 @@ def config_learning_curriculum():
     algCfg.PIBBCfg.threshold = start_PPO_acting_iteration
     algCfg.PPOCfg.gamma = 0.5
     algCfg.PPOCfg.change_RW_scales = True
+    algCfg.PPOCfg.n_iterations_learning_from_CPG_RBFN = 999
     algCfg.PPOCfg.divider_initial_steps = 1.
     algCfg.PPOCfg.boost_kl_distance = 45.
     algCfg.PPOCfg.decay_boost_kl_distance = 0.92
+    algCfg.PPOCfg.start_with_influence = start_influence_PPO
+    algCfg.PPOCfg.change_rw_iter = delay_terrains
+    algCfg.PPOCfg.step_increase_rw = 0.05
+    algCfg.PPOCfg.gamma_filter = 0.2
 
     if CURRICULUM_CPG_RBFN and not RECOVER_CPG:
         algCfg.PIBBCfg.switching_indirect_to_direct = True
@@ -125,6 +139,7 @@ def config_randomization_curriculum():
     randCurrCfg.MotorParameters.step_randomization_motor = 0.
 
     randCurrCfg.ModelParameters.randomize_payload = True
+    randCurrCfg.ModelParameters.payload_range = [[-1, -1], [1, 8]]
     randCurrCfg.ModelParameters.step_randomization_payload = 0.
 
     randCurrCfg.ModelParameters.randomize_friction = True
@@ -139,7 +154,7 @@ def config_randomization_curriculum():
 
     randCurrCfg.Control.randomization_activated = True
     randCurrCfg.Control.generate_first_randomization = True
-    randCurrCfg.Control.start_randomization_iteration = 50
+    randCurrCfg.Control.start_randomization_iteration = start_PPO_acting_iteration
     randCurrCfg.Control.randomization_interval_iterations = 3
     randCurrCfg.Control.randomization_frequency_iteration = 4
     randCurrCfg.Control.start_randomization_frequency_iteration = changing_direct_iteration
@@ -193,26 +208,26 @@ def config_terrain(env_config):
         # #     "amplitude": 0.4,
         # #     "downsampled_scale": 0.5
         # # },
-        {
-            "terrain": "stairs_terrain",
-            "step_width": 0.5,
-            "step_height": 0.15,
-            "downsampled_scale": 0.5
-        },
-        {
-            "terrain": "random_uniform_terrain",
-            "min_height": -0.3,
-            "max_height": 0.3,
-            "step": 0.025,
-            "downsampled_scale": 0.5
-        },
+        # {
+        #     "terrain": "stairs_terrain",
+        #     "step_width": 0.5,
+        #     "step_height": 0.15,
+        #     "downsampled_scale": 0.5
+        # },
         # {
         #     "terrain": "random_uniform_terrain",
         #     "min_height": -0.3,
         #     "max_height": 0.3,
         #     "step": 0.025,
         #     "downsampled_scale": 0.5
-        # }
+        # },
+        {
+            "terrain": "random_uniform_terrain",
+            "min_height": -0.3,
+            "max_height": 0.3,
+            "step": 0.025,
+            "downsampled_scale": 0.5
+        }
     ]
 
     terrain_com_conf = TerrainComCfg()
@@ -229,24 +244,22 @@ def config_terrain(env_config):
         curriculum_terr = TerrainCurrCfg()
 
         curriculum_terr.object = terrain_obj
-        delay = 0
-        first_curr = start_PPO_acting_iteration + 70 + delay -20
-        second_curr = start_PPO_acting_iteration + 120 + delay - 20
-        third_curr = start_PPO_acting_iteration + 180 + delay -40
-        fourth_curr = start_PPO_acting_iteration + 240 + delay - 60 # 700
-        fifth_curr = start_PPO_acting_iteration + 360 + delay -80  # 1750
-        six_curr = start_PPO_acting_iteration + 470 + delay -100 # 1750
-        seventh_curr = start_PPO_acting_iteration + 600 + delay -120 # 1750
-        eight_curr = start_PPO_acting_iteration + 700 + delay  # 1750
+        delay = delay_terrains
+        start = 20
+        first_curr = start_PPO_acting_iteration + start + delay -20 -10 - 10 + 10
+        second_curr = start_PPO_acting_iteration + start + 50 + delay - 40 -10 - 20 + 20 + 10
+        third_curr = start_PPO_acting_iteration + start + 60 + delay -60 -10 - 30 + 30 + 80 + 20
+        fourth_curr = start_PPO_acting_iteration + start + 70 + 60 + delay - 80 - 10 - 40 + 4 + 120 + 40# 700 
+        fifth_curr = start_PPO_acting_iteration + 360 + delay -100  -10 - 50 + 50 + 150 + 100# 1750
+        six_curr = 1750
+
         curriculum_terr.Control.threshold = {
             first_curr: False,
             second_curr: False,
             third_curr: False,
             fourth_curr: False,
             fifth_curr: False,
-            six_curr: False,
-            seventh_curr: False,
-            eight_curr: False}
+            six_curr: False,}
         curriculum_terr.percentage_step = 0.32
     else:
         curriculum_terr = None
@@ -382,7 +395,7 @@ reward_list = {
     },
 
     "x_velocity": {
-        "weight": 1. * 2 * 1.8 * 2.1 * 1.7 * 1.05,  # 3.8
+        "weight": 1. * 2 * 1.8 * 2.1 * 1.7 * 1.5,  # 3.8
         "reward_data": {
             "exponential": False,
             "weight": 0.178  # 0.177
@@ -408,7 +421,8 @@ reward_list = {
     },
 
     "ppo_penalization": {
-        "weight": -7.,
+        "weight": -10.,
+        "discount_level": 0.25
     }
 
     # "vel_cont": {
@@ -431,13 +445,133 @@ reward_list = {
 
 }
 
+reward_list = {
+    "x_distance": {
+    "weight": 2.2,
+    "reward_data": {
+      "absolute_distance": False
+    }
+  },
+  "y_distance": {
+    "weight": -0.18 * 2 * 1.4 * 2,
+    "reward_data": {
+      "absolute_distance": True
+    }
+  },
+  "high_penalization_contacts": {
+    "weight": -2.5 * 10 * 1.7 * 3 * 3,
+    "reward_data": {
+      "absolute_distance": True,
+      "max_clip": 2.5,
+      "weights": {
+        "correction_state": 0.02,
+        "distance": 0.5
+      }
+    }
+  },
+  "height_error": {
+    "weight": -23.88,
+    "reward_data": {
+      "max_clip": 2.5
+    }
+  },
+  "slippery": {
+    "weight": 0.3 * 10 * 5 * 1.2 * 2,
+    "reward_data": {
+      "slippery_coef": -0.9 * 1.5*1.2
+    }
+  },
+  "z_vel": {
+    "weight": 4.2 * 5,
+    "reward_data": {
+      "exponential": False,
+      "weight": -0.24
+    }
+  },
+  "roll_pitch": {
+    "weight": 0.24948 * 15 * 2 * 1.5 * 1.5, # for 1.5 cph, * 1.5 
+    "reward_data": {
+      "exponential": False,
+      "weight": -0.15
+    }
+  },
+  "torque_penalization": {
+      "weight": 0.2, # for 1.5 cph, * 1.5 
+        "reward_data": {
+        "weight": -0.0005
+        }
+  },
+  "yaw_vel": {
+    "weight": 0.046200000000000005 * 1.2,
+    "reward_data": {
+      "exponential": False,
+      "weight": -0.1,
+      "command": 0.0
+    }
+  },
+  "y_velocity": {
+    "weight": 0.16000000000000003 * 1.5 * 6,
+    "reward_data": {
+      "exponential": False,
+      "weight": -0.075
+    }
+  },
+  "x_velocity": {
+    "weight": 9.072000000000001 * 2 * 5 * 2,
+    "reward_data": {
+      "exponential": False,
+      "weight": 0.178
+    }
+  },
+  "velocity_smoothness": {
+    "weight": 0.06 * 10 * 1.5 * 2,
+    "reward_data": {
+      "weight_vel": 0.01,
+      "weight_acc": 2e-05,
+      "weight": -0.00005
+    }
+  },
+  "limits": {
+    "weight": 0.1,
+    "reward_data": {
+      "velocity_limits": 1.0,
+      "joint_limits": 1.0,
+      "weight": -1
+    }
+  },
+
+  "noise_ppo_penalization": {
+        "weight": -0,
+        "discount_level": 0.25,
+    },
+
+
+    "ppo_penalization": {
+        "weight": -50. * 20 * 10 * 50,
+        "discount_level": 0.25,
+    },
+    "low_penalization_contacts": {
+        "weight": -0.25 * 1.5,
+        "reward_data": {
+            "absolute_distance": True,
+            "max_clip": 2.5,
+            "weights": {
+                "correction_state": 0.02,
+                "distance": 0.5,
+            }
+        }
+    },
+}
+
 n_kernels = 20
 h = 10
 
 if RECOVER_CPG:
-    decay = 0.8
-    variance = 0.003
-    noise_boost = 0.9
+    decay = 0.992
+    variance = 0.015
+    variance = 0.0
+    noise_boost = 0.1
+    noise_boost = 0.0
 elif CURRICULUM_CPG_RBFN:
     decay = 0.992
     variance = 0.027
@@ -461,6 +595,9 @@ if CURRICULUM_CPG_RBFN:
     encoding = "indirect"
 else:
     # encoding = "indirect"
+    encoding = "direct"
+
+if RECOVER_CPG:
     encoding = "direct"
 
 # actions_scale = 0.2
@@ -513,7 +650,7 @@ config = {
     "RBF": rbf_param,
     "CPG": cpg_param,
     "UTILS": cpg_utils,
-    "deactivate_hip": True
+    "deactivate_hip": False
 }
 
 cpg_rbf_nn = CPGRBFN(config, dimensions=rollouts, load_cache=LOAD_CACHE)
@@ -521,7 +658,7 @@ cpg_rbf_nn = CPGRBFN(config, dimensions=rollouts, load_cache=LOAD_CACHE)
 n_out = cpg_rbf_nn.get_n_outputs()
 print(f"n_out: {n_out}")
 
-latent_space_size = 12
+latent_space_size = 12 + 8
 latent_heads_size = 32
 priv_obs = 21 + 3
 head_cpg_latent = None
@@ -539,13 +676,13 @@ actorArgs = NNCreatorArgs()
 actorArgs.inputs = [actor_input]
 # actorArgs.hidden_dim = [128, 64]
 # actorArgs.hidden_dim = [256, 128]
-actorArgs.hidden_dim = [128]
+actorArgs.hidden_dim = [256, 128]
 actorArgs.outputs = [n_out if not CURRICULUM_CPG_RBFN else 12]
 
 criticArgs = NNCreatorArgs()
 criticArgs.inputs = [actor_input]
 # criticArgs.hidden_dim = [128, 64]
-criticArgs.hidden_dim = [128, 64]
+criticArgs.hidden_dim = [256, 128]
 criticArgs.outputs = [1]
 
 expertArgs = NNCreatorArgs()
@@ -555,7 +692,7 @@ if ACTIVATE_HEIGHT_READ:
     expertArgs.hidden_dim = [128, 64]
 else:
     expertArgs.hidden_dim = [64]
-
+expertArgs.hidden_dim = [256, 128]
 if ACTIVATE_CPG_LATENT_HEAD or ACTIVATE_PHI_AMPLITUDE_HEAD:
     expertArgs.outputs = [latent_heads_size]
 
@@ -579,13 +716,13 @@ else:
 studentArgs = NNCreatorArgs()
 studentArgs.inputs = [num_prev_obs * n_observations]
 # criticArgs.hidden_dim = [128, 64]
-studentArgs.hidden_dim = [128, 64]
+studentArgs.hidden_dim = [256, 64]
 studentArgs.outputs = [space_student]
 
 actor_std_noise = 1.
 
 actorCritic = ActorCritic(actorArgs, criticArgs, actor_std_noise, expertArgs, studentArgs, debug_mess=True,
-                          scale_max=2, scale_min=-2, head_encoder_cpg_actions=head_cpg_latent,
+                          scale_max=max_min_actor, scale_min=-max_min_actor, head_encoder_cpg_actions=head_cpg_latent,
                           head_cpg_phi_amplitude=head_phi_amplitude)
 
 ppo_cfg = PPOArgs()
@@ -593,13 +730,14 @@ ppo_cfg.num_past_actions = num_prev_obs
 ppo_cfg.num_mini_batches = num_mini_batches
 ppo = PPO(actorCritic, device=device, verbose=True, cfg=ppo_cfg, store_primitive_movement=ACTIVATE_CPG_LATENT_HEAD)
 
-reward_obj = Rewards(rollouts, device, reward_list, 0.999999, step_env, discrete_rewards=True)
+
 pibb = PIBB(rollouts, h, 1, n_kernels * n_out, decay, variance, device="cuda:0", boost_noise=noise_boost)
 env_config = EnvConfig()
 config_env()
 
 logger = Logger(save=SAVE_DATA, frequency=frequency_logger, frequency_plot=frequency_plot,
                 PIBB_param=pibb.get_hyper_parameters(), nn_config=config, show_PPO_graph=show_PPO_graph)
+reward_obj = Rewards(rollouts, device, reward_list, 0.999999, step_env, logger, discrete_rewards=True)
 config_camera(ACTIVE_RECORDING_CAMERA, env_config, logger, step_env, int(1 / 0.01))
 
 terrain_obj, terrain_curr = config_terrain(env_config)
