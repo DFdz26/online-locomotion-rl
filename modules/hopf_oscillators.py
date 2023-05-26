@@ -28,7 +28,7 @@ class HopfOscillators(torchNet):
         self.intrinsic_amplitude = intrinsic_amplitude
 
         self.change_amplitude = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
-        self.change_phase = 0.0
+        self.change_phase = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
         self.change_velocity_amplitude = 0.0
 
         self.command_signal_a = command_signal_a
@@ -130,13 +130,13 @@ class HopfOscillators(torchNet):
         self.phase = self.init_phase
 
         self.change_amplitude = 0.0
-        self.change_phase = 0.0
+        self.change_phase = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
         self.change_velocity_amplitude = 0.0
 
     def _get_new_phase(self, dt, phase_shift):
         prev_amplitude_change = self.change_phase
-
         self.change_phase = 2 * math.pi * self.intrinsic_frequency * self.command_signal_d + phase_shift
+
         self.phase += (self.change_phase + prev_amplitude_change) * dt / 2
 
 

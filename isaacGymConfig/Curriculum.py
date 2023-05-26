@@ -538,50 +538,50 @@ class AlgorithmCurriculum:
 
         rw_weights["ppo_penalization"]["weight"]  = -0.35
         rw_weights["ppo_penalization"]["weight"]  = -1.5 * 5 / 1.e2
-        rw_weights["ppo_penalization"]["weight"]  = -1.5 * 5 / 1.e1
+        rw_weights["ppo_penalization"]["weight"]  = -1.5 * 5 * 10 * 5/ 1.e1 / 0.5
         # rw_weights["ppo_penalization"]["weight"]  = 0
         rw_weights["noise_ppo_penalization"]["weight"]  = -0.075* 5.5* 40 *30 / 1.e2 #6.75  / 1.e11
         rw_weights["noise_ppo_penalization"]["weight"]  = 0 #6.75  / 1.e11
         rw_weights["noise_ppo_penalization"]["weight"]  = -0.001 / 1.e1  
         # rw_weights["noise_ppo_penalization"]["weight"]  = 0 #6.75  / 1.e11
-        rw_weights["velocity_smoothness"]["weight"]  = 0.02 * 0.001
+        rw_weights["velocity_smoothness"]["weight"]  = 0.02 * 0.001 * 2.5 * 1.23
         rw_weights["velocity_smoothness"]["curriculum"]  = True
         # rw_weights["velocity_smoothness"]["weight"]  = 0
 
         rw_weights["high_penalization_contacts"]["weight"]  = -3.5
-        rw_weights["high_penalization_contacts"]["weight"]  = -3.5
+        rw_weights["high_penalization_contacts"]["weight"]  = -3.5 * 1.e3
         rw_weights["low_penalization_contacts"]["weight"]  = -1.5
         rw_weights["high_penalization_contacts"]["curriculum"]  = True
         rw_weights["high_penalization_contacts"]["curriculum"]  = True
 
-        rw_weights["y_velocity"]["weight"]  = 1.2 * 0
-        rw_weights["y_velocity"]["curriculum"] = True
+        rw_weights["y_velocity"]["weight"]  = 1.2 * 2
+        rw_weights["y_velocity"]["curriculum"] = False
 
         rw_weights["x_distance"]["weight"]  = 20 * 40 / 1.e3
-        rw_weights["x_distance"]["weight"]  = 0
+        rw_weights["x_distance"]["weight"]  = 0.08
         # rw_weights["x_distance"]["weight"]  = 0
         rw_weights["x_velocity"]["weight"]  = 0
         # rw_weights["x_velocity"]["weight"]  = 8
-        rw_weights["x_velocity"]["curriculum"] = True
+        rw_weights["x_velocity"]["curriculum"] = False
 
 
         rw_weights["roll_pitch"]["weight"]  = 2.1
-        rw_weights["roll_pitch"]["weight"]  = 0.001 * 1.e4 * 3.5 *2 * 1.75
+        rw_weights["roll_pitch"]["weight"]  = 0.001 * 1.e4 * 3.5 *2 * 1.75 * 1.5  * 2
         rw_weights["roll_pitch"]["curriculum"] = True
         rw_weights["roll_pitch"]["curriculum"] = False
 
         rw_weights["slippery"]["weight"]  = 0.01
-        rw_weights["slippery"]["weight"]  = 0.1 * 1.e1 * 5
+        rw_weights["slippery"]["weight"]  = 0.1 * 1.e1 * 25
         rw_weights["slippery"]["curriculum"] = True
         rw_weights["slippery"]["curriculum"] = True
 
         rw_weights["torque_penalization"]["weight"]  = 0.0005
-        rw_weights["torque_penalization"]["weight"]  = 0.01/1.e1 * 1.2
+        rw_weights["torque_penalization"]["weight"]  = 0.000000000012
         rw_weights["torque_penalization"]["curriculum"] = True
         rw_weights["torque_penalization"]["curriculum"] = True
 
         rw_weights["yaw_vel"]["weight"]  = 1.2
-        rw_weights["yaw_vel"]["weight"]  = 0.01 * 1.e3 * 3
+        rw_weights["yaw_vel"]["weight"]  = 0.01 * 1.e3 * 3 * 2
         rw_weights["yaw_vel"]["curriculum"] = False
 
         rw_weights["z_vel"]["weight"]  = 0.1 / 1.e3 * 1.2
@@ -599,116 +599,131 @@ class AlgorithmCurriculum:
         # rw_weights["z_vel"]["weight"] = 0.01
         # rw_weights["torque_penalization"]["weight"] = 0.01
 
-        # rw_weights = {
-        #     "x_distance": {
-        #         "weight": 0.0,
-        #         "reward_data": {
-        #         "absolute_distance": True
-        #         }
-        #     },
-        #     "y_distance": {
-        #         "weight": 0.0,
-        #         "reward_data": {
-        #         "absolute_distance": True
-        #         }
-        #     },
-        #     "high_penalization_contacts": {
-        #         "weight": -50,
-        #         "reward_data": {
-        #         "absolute_distance": True,
-        #         "max_clip": 2.5,
-        #         "weights": {
-        #             "correction_state": 0.02,
-        #             "distance": 0.5
-        #         }
-        #         }
-        #     },
-        #     "height_error": {
-        #         "weight": 0.0,
-        #         "reward_data": {
-        #         "max_clip": 2.5
-        #         }
-        #     },
-        #     "slippery": {
-        #         "weight": 1.5,
-        #         "reward_data": {
-        #         "slippery_coef": -1.62
-        #         }
-        #     },
-        #     "z_vel": {
-        #         "weight": 0.01,
-        #         "reward_data": {
-        #         "exponential": False,
-        #         "weight": -0.24
-        #         }
-        #     },
-        #     "roll_pitch": {
-        #         "weight": 1.5,
-        #         "reward_data": {
-        #         "exponential": False,
-        #         "weight": -0.15
-        #         }
-        #     },
-        #     "torque_penalization": {
-        #         "weight": 0.01,
-        #         "reward_data": {
-        #         "weight": -0.0005
-        #         }
-        #     },
-        #     "yaw_vel": {
-        #         "weight": 0.08,
-        #         "reward_data": {
-        #         "exponential": False,
-        #         "weight": -0.1,
-        #         "command": 0.0
-        #         }
-        #     },
-        #     "y_velocity": {
-        #         "weight": 1.8,
-        #         "reward_data": {
-        #         "exponential": False,
-        #         "weight": -0.075
-        #         }
-        #     },
-        #     "x_velocity": {
-        #         "weight": 0.01,
-        #         "reward_data": {
-        #         "exponential": False,
-        #         "weight": 0.178
-        #         }
-        #     },
-        #     "velocity_smoothness": {
-        #         "weight": 0.025,
-        #         "reward_data": {
-        #         "weight_vel": 0.01,
-        #         "weight_acc": 2e-05,
-        #         "weight": -5e-05
-        #         }
-        #     },
-        #     "limits": {
-        #         "weight": 1.0,
-        #         "reward_data": {
-        #         "velocity_limits": 1.0,
-        #         "joint_limits": 1.0,
-        #         "weight": -1
-        #         }
-        #     },
-        #     "ppo_penalization": {
-        #         "weight": -0.45,
-        #         "discount_level": 0.35
-        #     },
-        #     "low_penalization_contacts": {
-        #         "weight": 1.0,
-        #         "reward_data": {
-        #         "absolute_distance": True,
-        #         "max_clip": 2.5,
-        #         "weights": {
-        #             "correction_state": 0.02,
-        #             "distance": 0.5
-        #         }
-        #         }
-        #     }
-        #     }
+        #{
+        rw_weights = {
+        "x_distance": {
+            "weight":1.2 ,
+            "reward_data": {
+            "absolute_distance": False
+            }
+        },
+        "y_distance": {
+            "weight": 0.0,
+            "reward_data": {
+            "absolute_distance": True
+            }
+        },
+        "high_penalization_contacts": {
+            "weight": -0.1 * 20,
+            "reward_data": {
+            "absolute_distance": True,
+            "max_clip": 2.5,
+            "weights": {
+                "correction_state": 0.02,
+                "distance": 0.5
+            }
+            },
+            "curriculum": True
+        },
+        "height_error": {
+            "weight": -1.2 * 1.e3 * 2,
+            "reward_data": {
+            "max_clip": 2.5
+            },
+            "curriculum": True
+        },
+        "slippery": {
+            "weight": 5.0 * 10,
+            "reward_data": {
+            "slippery_coef": -1.62
+            },
+            "curriculum": True
+        },
+        "z_vel": {
+            "weight": 0.00012 * 0.5,
+            "reward_data": {
+            "exponential": False,
+            "weight": -0.24
+            },
+            "curriculum": True
+        },
+        "roll_pitch": {
+            "weight": 12 * 5 *2*3*3,
+            "reward_data": {
+            "exponential": False,
+            "weight": -0.15
+            },
+            "curriculum": True
+        },
+        "torque_penalization": {
+            "weight": 0.0012 * 1.e-5 * 0,
+            "reward_data": {
+            "weight": -0.0005
+            },
+            "curriculum": True
+        },
+        "yaw_vel": {
+            "weight": 30.0 ,
+            "reward_data": {
+            "exponential": False,
+            "weight": -0.1,
+            "command": 0.0
+            },
+            "curriculum": True
+        },
+        "y_velocity": {
+            "weight": 1.2,
+            "reward_data": {
+            "exponential": False,
+            "weight": -0.075
+            },
+            "curriculum": True
+        },
+        "x_velocity": {
+            "weight": 0.8 * 100,
+            "reward_data": {
+            "exponential": False,
+            "weight": 0.178
+            },
+            "curriculum": True
+        },
+        "velocity_smoothness": {
+            "weight": -2e-3 * 0, 
+            "reward_data": {
+            "weight_vel": 0.01,
+            "weight_acc": 2e-05,
+            "weight": -5e-05
+            },
+            "curriculum": False
+        },
+        "limits": {
+            "weight": 0.0,
+            "reward_data": {
+            "velocity_limits": 1.0,
+            "joint_limits": 1.0,
+            "weight": -1
+            }
+        },
+        "noise_ppo_penalization": {
+            "weight": -0.0001,
+            "discount_level": 0.25
+        },
+        "ppo_penalization": {
+            "weight": -0.75 * 1.25,
+            "discount_level": 0.25
+        },
+        "low_penalization_contacts": {
+            "weight": -1.5,
+            "reward_data": {
+            "absolute_distance": True,
+            "max_clip": 2.5,
+            "weights": {
+                "correction_state": 0.02,
+                "distance": 0.5
+            }
+            }
+        }
+        }
 
         RewardObj.save_weights("rewards_PPO.json")
         # rw_weights["changed_actions"]["weight"] *= 2.5
@@ -894,7 +909,7 @@ class AlgorithmCurriculum:
             else:
                 self.filtered_actions_PPO = self.filtered_actions_PPO * (1 - self.gamma_filter_PPO) + actions_PPO * self.gamma_filter_PPO
 
-            rw_ppo_diff_cpg = torch.sum(torch.square(actions_CPG - actions_PPO), dim=-1)
+            rw_ppo_diff_cpg = torch.sum(torch.square(2*actions_CPG - actions_PPO), dim=-1)
 
             # print(self.filtered_actions_PPO[0,0], actions_PPO[0,0])
 
@@ -914,7 +929,7 @@ class AlgorithmCurriculum:
             if actions is None:
                 actions = self.filtered_actions_PPO * self.gamma
             else:
-                actions = self.CPG_influence * actions + (1 - self.CPG_influence) * self.filtered_actions_PPO
+                actions = self.CPG_influence * actions + (1 - self.CPG_influence) * self.filtered_actions_PPO * 2
 
         elif self.learning_actor_from_cpg:
             PPO.save_data_teacher_student_actor(observations, expert_obs, actions_CPG)

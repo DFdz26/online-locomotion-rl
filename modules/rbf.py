@@ -57,7 +57,7 @@ class RBF(torchNet):
         # step CPG
         unsorted_cpg = self.zeros(2, self.__t_init)
         for i in range(self.__t_init):
-            cpg = self.cpg()
+            cpg = self.cpg.forward()
             if self.hopf:
                 cpg = cpg[0]
 

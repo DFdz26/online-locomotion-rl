@@ -74,7 +74,7 @@ start_influence_PPO = 0.5
 delay_terrains = 99999
 
 if RECOVER_CPG:
-    start_PPO_acting_iteration = 0
+    start_PPO_acting_iteration = 200
 
 
 def config_camera(activate, _env_config: EnvConfig, _logger: Logger, frames, fps=30):
@@ -118,8 +118,8 @@ def config_learning_curriculum():
     algCfg.PPOCfg.decay_boost_kl_distance = 0.92
     algCfg.PPOCfg.start_with_influence = start_influence_PPO
     algCfg.PPOCfg.change_rw_iter = delay_terrains
-    algCfg.PPOCfg.step_increase_rw = 0.05
-    algCfg.PPOCfg.gamma_filter = 0.2
+    algCfg.PPOCfg.step_increase_rw = 0.025
+    algCfg.PPOCfg.gamma_filter = 0.1
 
     if CURRICULUM_CPG_RBFN and not RECOVER_CPG:
         algCfg.PIBBCfg.switching_indirect_to_direct = True
@@ -668,7 +668,7 @@ if ACTIVATE_HEIGHT_READ:
     priv_obs += 52
 
 # n_observations = 45
-n_observations = 42
+n_observations = 42 + 1
 actor_input = n_observations + latent_space_size
 
 actorArgs = NNCreatorArgs()
@@ -758,7 +758,7 @@ history_obj = History(rollouts, num_prev_obs, observation_shape=n_observations,
                       device=device) if ACTIVATE_HISTORY else None
 robot = Runner(policy, learning_algorithm, logger, config_file, env_config, reward_obj,
                n_out if not CURRICULUM_CPG_RBFN else 12,
-               terrain_obj, curricula=curricula, verbose=True, store_observations=True, history_obj=history_obj)
+               terrain_obj, curricula=curricula, verbose=True, store_observations=True, history_obj=history_obj, device=device)
 
 try:
     robot.learn(max_iterations, step_env)

@@ -7,6 +7,7 @@ from modules.logger import Logger
 
 from isaacGymConfig.Rewards import Rewards
 from isaacGymConfig.Curriculum import Curriculum
+from isaacgym.torch_utils import *
 
 
 class Runner:
@@ -14,7 +15,7 @@ class Runner:
 
     def __init__(self, policy, learning_algorithm, logger: Logger, config_file, env_config, reward: Rewards,
                  num_actions, terrain_config=None, curricula=None, verbose=False, store_observations=False,
-                 history_obj=None):
+                 history_obj=None, device="cpu"):
         self.history_obj = history_obj
         self.prev_obs = None
         self.agents = RobotConfig(config_file, env_config, reward, terrain_config, curricula, verbose)
@@ -30,6 +31,7 @@ class Runner:
         self.best_distance = True
         self.long_buffer = None
         self.num_terrains = 1 if terrain_config is None else terrain_config.rows
+        self.device = device
 
         self.recording = False
 
@@ -131,34 +133,61 @@ class Runner:
         push_robot = False
         new_frequency = None
         frequency_change = None
+        change_maximum = False
+        minimum = 0.49
+        maximum = 0.51
+        freq_control = None
         self.starting_training_time = time.time()
         self.learning_algorithm.prepare_training(self.agents, steps_ppo, self.num_observation_sensor,
                                                  self.num_expert_observation, self.num_actions, self.policy)
 
-        for i in range(1000):
+        for i in range(199):
             self.starting_iteration_time = time.time()
 
-            if i == 200:
-                self.agents.get_record_robot()
+            # if i == 200:
+            #     self.agents.get_record_robot()
 
-            if i == 150:
-                push_robot = True
+            # if i == 150:
+            #     push_robot = True
+
+            # if i > 100:
+            #     freq_control = torch_rand_float(minimum, maximum, (self.agents.get_num_envs(), 1), device=self.device)
+            #     freq_control.clamp(min=0.45, max=1.)
+            #     maximum += 0.002
+            #     minimum -= 0.002
+            #     if maximum > 1.0:
+            #         maximum = 1.0
+            #     if minimum < 0.45:
+            #         minimum = 0.45
+            #     print("maximum phi:", maximum, "mean: ", freq_control.mean(), "minimum: ", minimum)
+
+            # elif change_maximum:
+            #     freq_control = torch.zeros(self.agents.get_num_envs(), 1, dtype=torch.float32, device=self.device, requires_grad=False).fill_(0.5)
+
+            #     # filter_ = torch.less_equal(freq_control, 0.37)
+
+            #     # if len(filter_.nonzero(as_tuple=True)[0]):
+            #     #     freq_control[filter_] = 0.
+
                 
 
+                
             for step in range(steps_per_iteration):
                 dt = new_frequency
 
                 if step == 75 and push_robot:
                     self.agents.inserte_push()
+                    print("pushing")
 
                 if dt is not None:
                     dt = (dt/4)*self.learning_algorithm.get_dt_cpgs()
 
-                actions, ppo_rw, rw_ppo_noise = self.learning_algorithm.act(self.obs, self.obs_exp, self.prev_obs, dt=dt, frequency_change=frequency_change)
+                actions, ppo_rw, rw_ppo_noise = self.learning_algorithm.act(self.obs, self.obs_exp, self.prev_obs, dt=dt, 
+                                                                            frequency_change=None if freq_control is None else torch.flatten(freq_control))
 
                 self.obs, self.obs_exp, actions, reward, \
                     dones, info, closed_simulation = self.agents.step(None, actions,
-                                                                      iterations_without_control=new_frequency)
+                                                                      iterations_without_control=new_frequency, freq_control=freq_control)
                 reward = self.rewards.include_ppo_reward_penalization(ppo_rw, rw_ppo_noise, reward, self.curricula.get_robot_levels())
                 self._store_history()
                 self.agents.save_distance()
@@ -174,6 +203,10 @@ class Runner:
                                                              closed_simulation)
                 if self.reset_envs_flag:
                     self.agents.reset_envs(torch.flatten(dones.nonzero()))
+
+                    if not change_maximum:
+                        change_maximum = True
+                        self.learning_algorithm.change_maximum_frequency_cpg(4.5)
 
                 self._recording_process()
                 if closed_simulation or torch.all(dones > 0):

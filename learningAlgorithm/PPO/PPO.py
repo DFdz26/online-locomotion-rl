@@ -51,7 +51,7 @@ class PPOArgs:
     max_grad_norm = 1.
 
     max_clipped_learning_rate = 1.e-2
-    max_clipped_learning_rate = 1.e-3
+    max_clipped_learning_rate = 5.e-4
     # max_clipped_learning_rate = 0.00019
     # # max_clipped_learning_rate = 1.e-2
     # # min_clipped_learning_rate = 5.e-6

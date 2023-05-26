@@ -151,6 +151,9 @@ class RobotConfig(BaseConfiguration):
     def enable_random_body_vel_beginning(self):
         self.start_random_vel = True
 
+    def get_num_envs(self):
+        return self.num_envs
+
     def disable_random_body_vel_beginning(self):
         self.start_random_vel = False
 
@@ -317,7 +320,7 @@ class RobotConfig(BaseConfiguration):
             self.dones.fill_(1)
 
     def inserte_push(self):
-        random = torch_rand_float(-0.5, 0.5, (self.num_envs, 6), device=self.device)
+        random = torch_rand_float(-1.5, 1.5, (self.num_envs, 6), device=self.device)
         self.root_states[:, 7:13] += random
 
     def _refresh_gym_tensors_(self):
@@ -723,7 +726,7 @@ class RobotConfig(BaseConfiguration):
 
         return obs, obs_expert, closed_simulation
 
-    def step(self, test_data=None, actions=None, position_control=True, iterations_without_control=None):
+    def step(self, test_data=None, actions=None, position_control=True, iterations_without_control=None, freq_control=None):
 
         if iterations_without_control is None:
             iterations_without_control = self.env_config.iterations_without_control
@@ -733,6 +736,7 @@ class RobotConfig(BaseConfiguration):
         obs = None
         obs_expert = None
         closed_simulation = self.compute_graphics()
+        self.freq_control = freq_control
 
         if not self.env_config.test_joints:            
             self.previous_dof_vel = self.dof_vel.detach().clone()
@@ -813,6 +817,9 @@ class RobotConfig(BaseConfiguration):
         #     dim=-1
         # )
 
+        if self.freq_control is None:
+            self.freq_control = torch.ones(self.num_envs, dtype=torch.float32, device=self.device)[:, None]
+
         if self.env_config.cfg_observations.NoiseObservation.enable_noise:
             noise_imu = torch.randn(self.projected_gravity.size()).to(self.device) * self.env_config.cfg_observations.NoiseObservation.noise[0]
             noise_position = torch.randn(self.dof_pos.size()).to(self.device) * self.env_config.cfg_observations.NoiseObservation.noise[1]
@@ -825,7 +832,8 @@ class RobotConfig(BaseConfiguration):
                 (self.dof_pos - self.default_dof_pos) + noise_position,
                 (self.dof_vel + noise_vel) * 0.05,
                 (self.base_ang_vel + noise_gyro) * 0.25,
-                self.actions + noise_actions),
+                self.actions + noise_actions,
+                self.freq_control),
                 dim=-1
             )
         else:
