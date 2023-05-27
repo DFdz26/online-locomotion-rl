@@ -602,7 +602,7 @@ class AlgorithmCurriculum:
         #{
         rw_weights = {
         "x_distance": {
-            "weight":1.2 ,
+            "weight":3.5 ,
             "reward_data": {
             "absolute_distance": False
             }
@@ -614,7 +614,7 @@ class AlgorithmCurriculum:
             }
         },
         "high_penalization_contacts": {
-            "weight": -0.1 * 20,
+            "weight": -0.1 * 22 * 0,
             "reward_data": {
             "absolute_distance": True,
             "max_clip": 2.5,
@@ -626,7 +626,7 @@ class AlgorithmCurriculum:
             "curriculum": True
         },
         "height_error": {
-            "weight": -1.2 * 1.e3 * 2,
+            "weight": -1.2 * 1.e3 * 2 * 0.001 * 0,
             "reward_data": {
             "max_clip": 2.5
             },
@@ -640,7 +640,7 @@ class AlgorithmCurriculum:
             "curriculum": True
         },
         "z_vel": {
-            "weight": 0.00012 * 0.5,
+            "weight": 0.00012 * 20. * 0,
             "reward_data": {
             "exponential": False,
             "weight": -0.24
@@ -648,31 +648,32 @@ class AlgorithmCurriculum:
             "curriculum": True
         },
         "roll_pitch": {
-            "weight": 12 * 5 *2*3*3,
+            # "weight": 12 * 5 *2*3*3*1.5*20*0,
+            "weight": 12 * 1.e2,
             "reward_data": {
             "exponential": False,
             "weight": -0.15
             },
-            "curriculum": True
+            "curriculum": False
         },
         "torque_penalization": {
-            "weight": 0.0012 * 1.e-5 * 0,
+            "weight": 0.0012 * 1.e-5,
             "reward_data": {
             "weight": -0.0005
             },
-            "curriculum": True
+            "curriculum": False
         },
         "yaw_vel": {
-            "weight": 30.0 ,
+            "weight": 30.0 * 10.0 * 5,
             "reward_data": {
             "exponential": False,
             "weight": -0.1,
             "command": 0.0
             },
-            "curriculum": True
+            "curriculum": False
         },
         "y_velocity": {
-            "weight": 1.2,
+            "weight": 1.2 * 10,
             "reward_data": {
             "exponential": False,
             "weight": -0.075
@@ -680,12 +681,12 @@ class AlgorithmCurriculum:
             "curriculum": True
         },
         "x_velocity": {
-            "weight": 0.8 * 100,
+            "weight": 0.8 * 20 * 1.7,
             "reward_data": {
             "exponential": False,
             "weight": 0.178
             },
-            "curriculum": True
+            "curriculum": False
         },
         "velocity_smoothness": {
             "weight": -2e-3 * 0, 
@@ -705,15 +706,15 @@ class AlgorithmCurriculum:
             }
         },
         "noise_ppo_penalization": {
-            "weight": -0.0001,
+            "weight": -0.0001*0,
             "discount_level": 0.25
         },
         "ppo_penalization": {
-            "weight": -0.75 * 1.25,
+            "weight": -0.75 * 0.01,
             "discount_level": 0.25
         },
         "low_penalization_contacts": {
-            "weight": -1.5,
+            "weight": -1.5 * 0,
             "reward_data": {
             "absolute_distance": True,
             "max_clip": 2.5,
@@ -722,7 +723,14 @@ class AlgorithmCurriculum:
                 "distance": 0.5
             }
             }
-        }
+        },
+        "stand_phase_error": {
+            "weight": -1.5 * 0.01,
+            "reward_data": {
+                "absolute_distance": True,
+                "max_clip": 2.5,
+            }
+            }
         }
 
         RewardObj.save_weights("rewards_PPO.json")
@@ -889,6 +897,7 @@ class AlgorithmCurriculum:
         amplitude = 1.
         rw_ppo_diff_cpg = None
         rw_ppo_noise = None
+        stand_phase = None
 
         if self.PPO_activated:
             encoder_info, amplitude = PPO.get_encoder_info(expert_obs)
@@ -898,6 +907,7 @@ class AlgorithmCurriculum:
             # rbfn, rbfn_delayed = PIBB.get_rbf_activations()
 
             actions = actions_CPG
+            stand_phase = torch.le(actions[:, [2, 5, 8, 11]], -0.8)
 
         if self.PPO_activated:
 
@@ -929,14 +939,15 @@ class AlgorithmCurriculum:
             if actions is None:
                 actions = self.filtered_actions_PPO * self.gamma
             else:
-                actions = self.CPG_influence * actions + (1 - self.CPG_influence) * self.filtered_actions_PPO * 2
+                # actions = self.CPG_influence * actions + (1 - self.CPG_influence) * self.filtered_actions_PPO * 2
+                actions = actions + self.filtered_actions_PPO
 
         elif self.learning_actor_from_cpg:
             PPO.save_data_teacher_student_actor(observations, expert_obs, actions_CPG)
 
         self.gamma = (1 - self.CPG_influence)
 
-        return actions, rw_ppo_diff_cpg, rw_ppo_noise
+        return actions, rw_ppo_diff_cpg, rw_ppo_noise, stand_phase
 
     @staticmethod
     def change_maximum_change_cpg(PIBB, maximum_freq, dt=None):
@@ -980,6 +991,7 @@ class AlgorithmCurriculum:
 
     def last_step_learning(self, obs, exp_obs, PIBB, PPO):
         cpg_mov = PIBB.last_step(obs, exp_obs, reset=(not self.PPO_learning_activated))
+        PIBB.policy.reset_hopf_random()
 
         if self.PPO_learning_activated:
             PPO.last_step(obs, exp_obs, cpg_mov)
@@ -1154,7 +1166,7 @@ class Curriculum:
         if not (self.algorithm_curriculum is None):
             return self.algorithm_curriculum.get_curriculum_action(PPO, PIBB, observation, expert_obs, prev_obs, change_frequency=change_frequency, dt=dt)
 
-        return None, None, None
+        return None, None, None, None
 
     def jump_env_to_terrain(self, env, terrain, initial_positions):
         if self.terrain_curriculum is None:

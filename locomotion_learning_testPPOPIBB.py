@@ -41,8 +41,8 @@ ACTIVE_RECORDING_CAMERA = True
 ACTIVATE_HEIGHT_READ = True
 ACTIVATE_CPG_LATENT_HEAD = True
 ACTIVATE_PHI_AMPLITUDE_HEAD = False
-frequency_recording = 75
-frequency_logger = 75
+frequency_recording = 100
+frequency_logger = 100 
 frequency_plot = 2
 
 CURRICULUM_CPG_RBFN = True
@@ -71,10 +71,10 @@ changing_direct_iteration = 41
 changing_direct_iteration = 100 # 100
 max_min_actor = 1
 start_influence_PPO = 0.5
-delay_terrains = 99999
+delay_terrains = 150
 
 if RECOVER_CPG:
-    start_PPO_acting_iteration = 200
+    start_PPO_acting_iteration = 0
 
 
 def config_camera(activate, _env_config: EnvConfig, _logger: Logger, frames, fps=30):
@@ -167,20 +167,20 @@ def config_terrain(env_config):
         {
             "terrain": "flat_terrain",
         },
-        {
-            "terrain": "random_uniform_terrain",
-            "min_height": -0.010,
-            "max_height": 0.010,
-            "step": 0.010,
-            "downsampled_scale": 0.5
-        },
-        {
-            "terrain": "random_uniform_terrain",
-            "min_height": -0.035,
-            "max_height": 0.035,
-            "step": 0.035,
-            "downsampled_scale": 0.5
-        },
+        # {
+        #     "terrain": "random_uniform_terrain",
+        #     "min_height": -0.010,
+        #     "max_height": 0.010,
+        #     "step": 0.010,
+        #     "downsampled_scale": 0.5
+        # },
+        # {
+        #     "terrain": "random_uniform_terrain",
+        #     "min_height": -0.035,
+        #     "max_height": 0.035,
+        #     "step": 0.035,
+        #     "downsampled_scale": 0.5
+        # },
         {
             "terrain": "random_uniform_terrain",
             "min_height": -0.06,
@@ -244,9 +244,10 @@ def config_terrain(env_config):
         curriculum_terr = TerrainCurrCfg()
 
         curriculum_terr.object = terrain_obj
-        delay = delay_terrains
+        delay = delay_terrains + 99999999
         start = 20
-        first_curr = start_PPO_acting_iteration + start + delay -20 -10 - 10 + 10
+        first_curr = start_PPO_acting_iteration + delay_terrains
+        # first_curr = start_PPO_acting_iteration + start + delay -20 -10 - 10 + 10
         second_curr = start_PPO_acting_iteration + start + 50 + delay - 40 -10 - 20 + 20 + 10
         third_curr = start_PPO_acting_iteration + start + 60 + delay -60 -10 - 30 + 30 + 80 + 20
         fourth_curr = start_PPO_acting_iteration + start + 70 + 60 + delay - 80 - 10 - 40 + 4 + 120 + 40# 700 
@@ -561,6 +562,13 @@ reward_list = {
             }
         }
     },
+    "stand_phase_error": {
+            "weight": 0,
+            "reward_data": {
+                "absolute_distance": True,
+                "max_clip": 2.5,
+            }
+            }
 }
 
 n_kernels = 20

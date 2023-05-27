@@ -15,7 +15,7 @@ from .Rewards import rep_keyword, root_keyword, initial_keyword, projected_gravi
 from .Rewards import termination_contact_indices_keyword, penalization_contact_indices_keyword, goal_height_keyword
 from .Rewards import foot_contact_indices_keyword, joint_velocity_keyword, foot_velocity_keyword
 from .Rewards import base_lin_vel_keyboard, base_ang_vel_keyboard, base_previous_lin_vel_keyboard
-from .Rewards import previous_actions_keyword, current_actions_keyword, joint_acceleration_keyword
+from .Rewards import previous_actions_keyword, current_actions_keyword, joint_acceleration_keyword, stand_phase_keyword
 from .Rewards import count_limit_vel_keyword, count_joint_limits_keyword, offset_keyword, current_torques_keyword
 import pickle
 
@@ -92,6 +92,7 @@ class RobotConfig(BaseConfiguration):
 
         self.limits = None
         self.finished = None
+        self.stand_phase = None
 
         self.rollout_time = self.env_config.rollout_time
 
@@ -353,6 +354,7 @@ class RobotConfig(BaseConfiguration):
             count_limit_vel_keyword: self.surpassing_velocity_limits,
             count_joint_limits_keyword: self.surpasing_limits,
             current_torques_keyword: self.torques,
+            stand_phase_keyword: self.stand_phase
             # offset_keyword: self.terrain_config.get_height_body_centre(self.root_states[:, :3])
         }
 
@@ -726,7 +728,7 @@ class RobotConfig(BaseConfiguration):
 
         return obs, obs_expert, closed_simulation
 
-    def step(self, test_data=None, actions=None, position_control=True, iterations_without_control=None, freq_control=None):
+    def step(self, test_data=None, actions=None, position_control=True, iterations_without_control=None, freq_control=None, stand_phase=None):
 
         if iterations_without_control is None:
             iterations_without_control = self.env_config.iterations_without_control
@@ -737,6 +739,7 @@ class RobotConfig(BaseConfiguration):
         obs_expert = None
         closed_simulation = self.compute_graphics()
         self.freq_control = freq_control
+        self.stand_phase = stand_phase
 
         if not self.env_config.test_joints:            
             self.previous_dof_vel = self.dof_vel.detach().clone()
@@ -1099,10 +1102,8 @@ class RobotConfig(BaseConfiguration):
     def _process_rigid_body_props(self, body_prop, n_env):
         self.default_body_mass = body_prop[0].mass if self.default_mass is None else self.default_mass
         
-        body_prop[0].mass = self.default_body_mass + self.payloads[n_env]
-        print("=======")
-        print(f"default mass: {self.default_body_mass}, new mass: {body_prop[0].mass}")
-        print("=======")
+        # body_prop[0].mass = self.default_body_mass + self.payloads[n_env]
+        body_prop[0].mass = self.default_body_mass
 
         return body_prop
 

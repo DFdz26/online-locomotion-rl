@@ -28,7 +28,7 @@ class PPOArgs:
     value_loss_coef = 0.5 
     clip_param = 0.2
     entropy_coef = 0.006
-    entropy_coef = 0.01
+    entropy_coef = 0.0
     num_learning_epochs = 2  # 5
     num_learning_epochs = 3  # 5
     # num_mini_batches = 1400  # mini batch size = num_envs*nsteps / nminibatches 400
@@ -51,7 +51,7 @@ class PPOArgs:
     max_grad_norm = 1.
 
     max_clipped_learning_rate = 1.e-2
-    max_clipped_learning_rate = 5.e-4
+    max_clipped_learning_rate = 1.e-2
     # max_clipped_learning_rate = 0.00019
     # # max_clipped_learning_rate = 1.e-2
     # # min_clipped_learning_rate = 5.e-6

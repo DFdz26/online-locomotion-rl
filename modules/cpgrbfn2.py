@@ -352,6 +352,10 @@ class CPGRBFN(torchNet):
     
     def get_last_rbfn_activations(self):
         return self.bf, self.bf_delayed
+    
+    def reset_hopf_random(self):
+        if self.cpg_type == "hopf":
+            self.cpg.reset(randomize=True)
 
     def change_maximum_speed_cpg(self, speed_change, dt=None):
         if self.cpg_type == 'hopf':
