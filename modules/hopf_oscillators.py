@@ -125,9 +125,9 @@ class HopfOscillators(torchNet):
         self.change_amplitude += (self.change_velocity_amplitude + prev_velocity_amplitude_change) * dt / 2
         self.amplitude += (self.change_amplitude + prev_amplitude_change) * dt / 2
 
-    def reset(self):
+    def reset(self, randomize=False):
         self.amplitude = self.init_amplitude
-        self.phase = self.init_phase
+        self.phase = self.init_phase + 0 if not randomize else torch.randn(self.num_envs, device=self.device)
 
         self.change_amplitude = 0.0
         self.change_phase = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)

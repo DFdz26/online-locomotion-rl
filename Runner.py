@@ -141,7 +141,7 @@ class Runner:
         self.learning_algorithm.prepare_training(self.agents, steps_ppo, self.num_observation_sensor,
                                                  self.num_expert_observation, self.num_actions, self.policy)
 
-        for i in range(199):
+        for i in range(9999):
             self.starting_iteration_time = time.time()
 
             # if i == 200:
@@ -175,19 +175,19 @@ class Runner:
             for step in range(steps_per_iteration):
                 dt = new_frequency
 
-                if step == 75 and push_robot:
+                if step == 9999 and push_robot:
                     self.agents.inserte_push()
                     print("pushing")
 
                 if dt is not None:
                     dt = (dt/4)*self.learning_algorithm.get_dt_cpgs()
 
-                actions, ppo_rw, rw_ppo_noise = self.learning_algorithm.act(self.obs, self.obs_exp, self.prev_obs, dt=dt, 
+                actions, ppo_rw, rw_ppo_noise, stand_phase = self.learning_algorithm.act(self.obs, self.obs_exp, self.prev_obs, dt=dt, 
                                                                             frequency_change=None if freq_control is None else torch.flatten(freq_control))
 
                 self.obs, self.obs_exp, actions, reward, \
                     dones, info, closed_simulation = self.agents.step(None, actions,
-                                                                      iterations_without_control=new_frequency, freq_control=freq_control)
+                                                                      iterations_without_control=new_frequency, freq_control=freq_control, stand_phase=stand_phase)
                 reward = self.rewards.include_ppo_reward_penalization(ppo_rw, rw_ppo_noise, reward, self.curricula.get_robot_levels())
                 self._store_history()
                 self.agents.save_distance()
@@ -206,7 +206,7 @@ class Runner:
 
                     if not change_maximum:
                         change_maximum = True
-                        self.learning_algorithm.change_maximum_frequency_cpg(4.5)
+                        # self.learning_algorithm.change_maximum_frequency_cpg(4.5)
 
                 self._recording_process()
                 if closed_simulation or torch.all(dones > 0):

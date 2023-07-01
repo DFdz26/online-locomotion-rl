@@ -25,6 +25,7 @@ joint_acceleration_keyword = 'acceleration_joints'
 count_limit_vel_keyword = 'velocity_limits_count'
 count_joint_limits_keyword = 'joint_limits_count'
 current_torques_keyword = 'current_torques'
+stand_phase_keyword = 'stand_phase_error'
 
 
 class IndividualReward:
@@ -129,6 +130,10 @@ class IndividualReward:
         
     def _prepare_buffer_torque_penalization_term_(self):
         self.torque_penalization_buffer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
+                                                      requires_grad=False)
+        
+    def _prepare_buffer_stand_phase_error_term_(self):
+        self.stand_error_buffer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device,
                                                       requires_grad=False)
 
     ###############################################################################################
@@ -406,9 +411,6 @@ class IndividualReward:
 
         return in_state
 
-    def _compute_in_state_torque_term_(self, simulation_info, reward_data):
-        pass
-
     def _compute_in_state_vel_cont_term_(self, simulation_info, reward_data):
         x_vel = simulation_info[base_lin_vel_keyboard][:, 0]
         previous_vel = simulation_info[base_previous_lin_vel_keyboard][:, 0]
@@ -426,6 +428,23 @@ class IndividualReward:
         self.accumulative_vel_cont_error += in_state
 
         return in_state
+    
+    def _compute_in_state_stand_phase_error_term_(self, simulation_info, reward_data):
+        stand_phase = simulation_info[stand_phase_keyword]
+
+        if stand_phase is None:
+            return torch.zeros(self.num_envs, device=self.device, requires_grad=False)
+
+        contact_forces = simulation_info[contact_forces_gravity_keyword]
+        foot_indices = simulation_info[foot_contact_indices_keyword]
+
+        in_contact = torch.norm(contact_forces[:, foot_indices, :], dim=-1) > 1.
+
+        in_state = ~torch.logical_and(in_contact, stand_phase)
+        in_state = torch.sum(in_state.long(), dim=-1)
+        self.stand_error_buffer += in_state
+
+        return in_state
 
     ###############################################################################################
 
@@ -438,6 +457,9 @@ class IndividualReward:
             return torch.abs(self.x_distance)
         else:
             return self.x_distance
+        
+    def _compute_final_stand_phase_error_term_(self, simulation_info, reward_data):
+        return self.stand_error_buffer
         
     def _compute_final_torque_penalization_term_(self, simulation_info, reward_data):
         return self.torque_penalization_buffer
@@ -557,6 +579,9 @@ class IndividualReward:
     def _clean_buffer_x_distance_(self):
         self.x_distance = None
         self.x_distance_step = None
+
+    def _clean_buffer_stand_phase_error_(self):
+        self.stand_error_buffer.fill_(0)
 
     def _clean_buffer_torque_penalization_(self):
         self.torque_penalization_buffer.fill_(0)
