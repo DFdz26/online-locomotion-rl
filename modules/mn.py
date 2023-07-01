@@ -157,8 +157,8 @@ class MN(torchNet):
         else:
             outputs = 1 * torch.tanh((x1 @ self.W))
 
-        if not self.use_so2:
-            outputs = outputs[:, 0, :]
+        # if not self.use_so2:
+        #     outputs = outputs[:, 0, :]
 
         outputs = outputs.reshape(self.dimensions, self.__n_out)
         # else:

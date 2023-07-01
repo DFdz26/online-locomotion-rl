@@ -82,6 +82,7 @@ class ActorCritic(nn.Module):
                 self.head_encoder_cpg_actions, self.head_cpg_phi_amplitude]
 
     def load_weights(self, actor_critic):
+        print(len(actor_critic))
         if len(actor_critic) == 5:
             self.actor_NN, self.critic_NN, self.expert_NN, self.student_NN, self.std = actor_critic
         elif len(actor_critic) == 4:
@@ -89,6 +90,15 @@ class ActorCritic(nn.Module):
         elif len(actor_critic) == 6:
             self.actor_NN, self.critic_NN, self.expert_NN, self.student_NN, \
                 self.std, self.head_encoder_cpg_actions, self.head_cpg_phi_amplitude = actor_critic
+
+            if not(self.head_cpg_phi_amplitude is None):
+                self.head_phi_cpg_activated = True
+
+            if not(self.head_encoder_cpg_actions is None):
+                self.head_cpg_actions_encoder_activated = True
+        elif len(actor_critic) == 7:
+            self.actor_NN, self.critic_NN, self.expert_NN, self.student_NN, self.std, \
+                self.head_encoder_cpg_actions, self.head_cpg_phi_amplitude = actor_critic
 
             if not(self.head_cpg_phi_amplitude is None):
                 self.head_phi_cpg_activated = True

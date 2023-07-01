@@ -247,7 +247,7 @@ class PPO:
         if self.verbose:
             print(f"Done.")
 
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=self.cfg.learning_rate_teacher_cpg)
+        # self.optimizer = optim.Adam(self.actor_critic.parameters())
 
     def last_step(self, last_critic_obs, exp_obs, primitive_movement_batch):
         last_values = self.actor_critic.evaluate(last_critic_obs, exp_obs, primitive_movement_batch).detach()
